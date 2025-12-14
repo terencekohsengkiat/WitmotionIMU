@@ -216,6 +216,32 @@
         const READ_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb";
         const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
+        // --- 1 EURO FILTER IMPLEMENTATION (From Reference) ---
+        class LowPassFilter {
+            constructor(alpha){this.alpha=alpha;this.lastVal=null;}
+            filterWithAlpha(val, alpha){
+                if(this.lastVal===null){this.lastVal=val;return val;}
+                const res=alpha*val+(1.0-alpha)*this.lastVal; this.lastVal=res; return res;
+            }
+        }
+        
+        class OneEuroFilter {
+            constructor(freq, minCutoff=1.0, beta=0.0, dcutoff=1.0) {
+                this.freq=freq; this.minCutoff=minCutoff; this.beta=beta; this.dcutoff=dcutoff;
+                this.x=new LowPassFilter(this.alpha(minCutoff)); this.dx=new LowPassFilter(this.alpha(dcutoff)); this.lastTime=null;
+            }
+            alpha(cutoff) { const te=1.0/this.freq; const tau=1.0/(2*Math.PI*cutoff); return 1.0/(1.0+tau/te); }
+            filter(val, timestamp) {
+                if(this.lastTime && timestamp) this.freq=1.0/(timestamp-this.lastTime);
+                this.lastTime=timestamp;
+                const d=(this.x.lastVal!==null)?(val-this.x.lastVal)*this.freq:0.0;
+                const edx=this.dx.filterWithAlpha(d, this.alpha(this.dcutoff));
+                const cutoff=this.minCutoff+this.beta*Math.abs(edx);
+                return this.x.filterWithAlpha(val, this.alpha(cutoff));
+            }
+        }
+        // -----------------------------------------------------
+
         const devices = new Map();
         let isRecording = false;
         let recordingStartTime = 0;
@@ -223,9 +249,8 @@
         let durationInterval = null;
 
         let globalQuatPollInterval = null;
-        let pollIndex = 0; // Tracks which sensor is next in line
+        let pollIndex = 0; 
         
-        // --- STAGGERED POLLING LOGIC ---
         function updatePollingSystem() {
             if (globalQuatPollInterval) {
                 clearInterval(globalQuatPollInterval);
@@ -238,9 +263,8 @@
                 return;
             }
 
-            // Target: 25Hz per sensor = 40ms cycle per sensor.
-            const targetCycle = 40; // 40ms = 25Hz
-            const stepDelay = Math.max(10, Math.floor(targetCycle / count)); // Don't go faster than 10ms
+            const targetCycle = 40; 
+            const stepDelay = Math.max(10, Math.floor(targetCycle / count)); 
             
             document.getElementById('pollingStatus').classList.remove('hidden');
             document.getElementById('pollRateDisplay').innerText = `Step: ${stepDelay}ms`;
@@ -250,16 +274,13 @@
                 const deviceArray = Array.from(devices.values());
                 if (deviceArray.length === 0) return;
 
-                // Pick the next sensor in the round-robin
                 const ctx = deviceArray[pollIndex % deviceArray.length];
-                pollIndex++; // Move to next for next tick
+                pollIndex++; 
 
-                // Ask ONLY this sensor
                 if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
                     sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
                 }
             }, stepDelay);
-
             console.log(`Staggered Polling: ${count} devices, ${stepDelay}ms steps`);
         }
 
@@ -276,9 +297,7 @@
             ctx.isWriting = true;
             try { 
                 await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
-            } catch(e) { 
-                // Ignore GATT errors
-            }
+            } catch(e) { }
             ctx.isWriting = false;
         }
         
@@ -321,7 +340,6 @@
 
                 const ui = createDeviceUI(device);
                 
-                // Initialize context
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
@@ -332,9 +350,14 @@
                     lastQuatTime: Date.now(),
                     quatMode: false,
                     isWriting: false,
-                    lastRoll: 0,              
+                    
+                    // --- NEW STATE FOR SMOOTHING ---
+                    // 1 Euro Filter Init (30Hz, 1.0, 0.007, 1.0 from Reference)
+                    rollFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0), 
+                    lastSmoothRoll: 0,
                     lastRollTime: Date.now(),
-                    filteredRollVel: 0        // <--- NEW: Filtered Velocity State
+                    filteredRollVel: 0
+                    // --------------------------------
                 };
                 devices.set(device.id, ctx);
 
@@ -653,27 +676,32 @@
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
                     if(compass < 0) compass += 360;
 
-                    // --- SMOOTHED VELOCITY LOGIC ---
+                    // --- SMOOTHING PIPELINE ---
+                    const nowSec = now / 1000;
+                    
+                    // 1. Filter Position First (using 1 Euro)
+                    const smoothRoll = ctx.rollFilter.filter(rollDeg, nowSec);
+
+                    // 2. Calculate Velocity from Smoothed Position
                     const dt = (now - ctx.lastRollTime) / 1000; // seconds
                     if (dt > 0) {
-                        const rollDiff = rollDeg - ctx.lastRoll;
-                        const rawVel = rollDiff / dt; // deg/s
+                        const rollDiff = smoothRoll - ctx.lastSmoothRoll;
+                        const currentVel = rollDiff / dt; // deg/s
                         
-                        // Simple Low Pass Filter (alpha = 0.1)
-                        // This acts similarly to a 1-Euro filter in that it smooths jitter.
-                        // You can tweak 0.1: Lower = Smoother but laggier. Higher = More responsive but noisier.
-                        ctx.filteredRollVel = (ctx.filteredRollVel * 0.9) + (rawVel * 0.1);
+                        // 3. Filter Velocity (0.8/0.2 split from Reference)
+                        ctx.filteredRollVel = (ctx.filteredRollVel * 0.8) + (currentVel * 0.2);
 
                         if (ctx.ui.phaseChart) {
                             const pc = ctx.ui.phaseChart;
-                            pc.data.datasets[0].data.push({ x: rollDeg, y: ctx.filteredRollVel });
+                            // Plot smoothed position vs smoothed velocity
+                            pc.data.datasets[0].data.push({ x: smoothRoll, y: ctx.filteredRollVel });
                             if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
                             pc.update();
                         }
                     }
-                    ctx.lastRoll = rollDeg;
+                    ctx.lastSmoothRoll = smoothRoll;
                     ctx.lastRollTime = now;
-                    // --------------------------------
+                    // --------------------------
 
                     ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
