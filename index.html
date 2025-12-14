@@ -29,13 +29,6 @@
             <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
         </div>
         <div class="flex gap-3 items-center">
-            <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-                <span class="text-slate-400">Target:</span> 
-                <span id="pollRateDisplay" class="text-green-400">--Hz</span>
-                <span class="text-slate-600 mx-1">|</span>
-                <span id="deviceCountDisplay" class="text-blue-400">0 sensors</span>
-            </div>
-            
             <button id="addDeviceBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center shadow-lg hover:shadow-blue-500/20">
                 <span class="mr-2 text-lg">+</span> Connect Sensor
             </button>
@@ -87,7 +80,7 @@
             <div class="canvas-container h-64 bg-slate-900 relative cursor-move">
                 <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-mono font-bold bg-slate-900/80 px-2 py-1 rounded mode-indicator border border-slate-700">Mode: Auto (Default)</div>
                 <div class="absolute top-2 right-2 text-[10px] font-mono bg-slate-900/80 px-2 py-1 rounded border border-slate-700 quat-rate-indicator hidden">
-                    <span class="text-purple-400">Quat</span> <span class="quat-hz text-green-400">--Hz</span>
+                    <span class="text-purple-400">Stream</span> <span class="quat-hz text-green-400">--Hz</span>
                 </div>
             </div>
 
@@ -126,43 +119,29 @@
                         </div>
 
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-purple-400 uppercase tracking-widest border-b border-slate-700 pb-1">2. Output Mode</h4>
+                            <h4 class="text-xs font-bold text-purple-400 uppercase tracking-widest border-b border-slate-700 pb-1">2. Output Optimization</h4>
                             
-                            <div class="quat-status-box bg-slate-900/50 border border-slate-600 rounded p-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm text-slate-300">Quaternion Response:</span>
-                                    <span class="quat-status-indicator text-xs font-mono px-2 py-1 rounded bg-red-900/50 text-red-400">NOT RESPONDING</span>
+                            <div class="bg-blue-900/30 border border-blue-700 rounded p-3 mb-2">
+                                <div class="text-sm font-bold text-blue-300 mb-2">🚀 High Speed Stream</div>
+                                <div class="text-xs text-blue-200/70 mb-3">
+                                    Click this to configure the sensor to automatically broadcast Quaternions at 50Hz. No polling required.
                                 </div>
-                                <div class="text-xs text-slate-500 mt-1">Polling is active. Status shows if this sensor responds.</div>
-                            </div>
-                            
-                            <div class="bg-orange-900/30 border border-orange-700 rounded p-3">
-                                <div class="text-sm font-bold text-orange-300 mb-2">⚡ Set Output Rate</div>
-                                <div class="text-xs text-orange-200/70 mb-3">If your sensor shows low Hz (1-10Hz), click below to set it to 100Hz. This setting is saved to the sensor.</div>
-                                <button class="set-100hz-btn w-full bg-orange-600 hover:bg-orange-500 text-white p-2 rounded font-bold text-sm">
-                                    Set 100Hz Output Rate
+                                <button class="start-stream-btn w-full bg-blue-600 hover:bg-blue-500 text-white p-2 rounded font-bold text-sm">
+                                    Start 50Hz Stream (Auto)
                                 </button>
                             </div>
                             
-                            <button class="set-9axis-btn w-full bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex items-center justify-between group">
-                                <div class="flex items-center gap-3">
+                            <div class="flex gap-2">
+                                <button class="set-9axis-btn w-1/2 bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex flex-col items-center justify-center gap-1 group">
                                     <span class="text-xl">🧭</span>
-                                    <div class="text-left">
-                                        <div class="text-sm font-bold text-slate-200">Set 9-Axis (Compass)</div>
-                                        <div class="text-[10px] text-slate-400">Enable Magnetometer</div>
-                                    </div>
-                                </div>
-                            </button>
-                            
-                            <button class="factory-reset-btn w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700 p-3 rounded flex items-center justify-between group">
-                                <div class="flex items-center gap-3">
+                                    <div class="text-[10px] text-slate-300 font-bold">9-Axis Compass</div>
+                                </button>
+                                
+                                <button class="factory-reset-btn w-1/2 bg-red-900/50 hover:bg-red-800/50 border border-red-700 p-3 rounded flex flex-col items-center justify-center gap-1 group">
                                     <span class="text-xl">🔄</span>
-                                    <div class="text-left">
-                                        <div class="text-sm font-bold text-red-300">Factory Reset</div>
-                                        <div class="text-[10px] text-red-400">Restore default configuration</div>
-                                    </div>
-                                </div>
-                            </button>
+                                    <div class="text-[10px] text-red-300 font-bold">Factory Reset</div>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="space-y-3">
@@ -206,41 +185,6 @@
         let syncTimestamp = null;
         let durationInterval = null;
 
-        let globalQuatPollInterval = null;
-        
-        // --- FIXED POLLING LOGIC ---
-        function updatePollingSystem() {
-            if (globalQuatPollInterval) {
-                clearInterval(globalQuatPollInterval);
-                globalQuatPollInterval = null;
-            }
-
-            const deviceCount = devices.size;
-            if (deviceCount === 0) {
-                document.getElementById('pollingStatus').classList.add('hidden');
-                return;
-            }
-
-            // TARGET: 30Hz for EVERYONE
-            // Instead of round-robin (one per tick), we poll ALL devices per tick.
-            const pollRate = 33; // 33ms ~ 30Hz
-            const effectiveHz = 30;
-            
-            document.getElementById('pollingStatus').classList.remove('hidden');
-            document.getElementById('pollRateDisplay').innerText = effectiveHz + 'Hz (Target)';
-            document.getElementById('deviceCountDisplay').innerText = deviceCount + ' sensor' + (deviceCount > 1 ? 's' : '');
-
-            globalQuatPollInterval = setInterval(() => {
-                devices.forEach(ctx => {
-                    if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
-                        sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
-                    }
-                });
-            }, pollRate);
-
-            console.log('Parallel Polling Active: ' + effectiveHz + 'Hz per device');
-        }
-
         function loadSettings(id) {
             const s = localStorage.getItem('sensor_' + id);
             return s ? JSON.parse(s) : { rot: { x: 0, y: 0, z: 0 } };
@@ -277,7 +221,6 @@
             clearInterval(ctx.magPollInterval);
             if (ctx.ui && ctx.ui.card) ctx.ui.card.remove();
             devices.delete(id);
-            updatePollingSystem();
             if (devices.size === 0) {
                 document.getElementById('recordBtn').classList.add('hidden');
                 document.getElementById('exportBtn').classList.add('hidden');
@@ -315,7 +258,6 @@
                     ui.card.classList.add('opacity-50', 'grayscale');
                     ui.card.querySelector('.device-name').innerText += " (Offline)";
                     clearInterval(ctx.battInterval);
-                    updatePollingSystem();
                 });
 
                 await readChar.startNotifications();
@@ -325,8 +267,6 @@
                     if(device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
                 }, 30000);
                 setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]), 2000);
-
-                updatePollingSystem();
 
                 document.getElementById('recordBtn').classList.remove('hidden');
                 document.getElementById('exportBtn').classList.remove('hidden');
@@ -414,19 +354,6 @@
                 liveCard.querySelector('.slider-rot-x').value = settings.rot.x;
                 liveCard.querySelector('.slider-rot-y').value = settings.rot.y;
                 liveCard.querySelector('.slider-rot-z').value = settings.rot.z;
-                
-                const ctx = devices.get(device.id);
-                const statusEl = liveCard.querySelector('.quat-status-indicator');
-                if (ctx && ctx.quatMode) {
-                    statusEl.innerText = 'RESPONDING ✓';
-                    statusEl.classList.remove('bg-red-900/50', 'text-red-400');
-                    statusEl.classList.add('bg-green-900/50', 'text-green-400');
-                } else {
-                    statusEl.innerText = 'NOT RESPONDING';
-                    statusEl.classList.remove('bg-green-900/50', 'text-green-400');
-                    statusEl.classList.add('bg-red-900/50', 'text-red-400');
-                }
-                
                 modal.classList.remove('hidden'); modal.classList.add('flex');
             });
             liveCard.querySelector('.close-settings').addEventListener('click', () => modal.classList.add('hidden') || modal.classList.remove('flex'));
@@ -443,33 +370,41 @@
                 }
             });
 
-            // SET 100Hz OUTPUT RATE BUTTON
-            liveCard.querySelector('.set-100hz-btn').addEventListener('click', async () => {
+            // --- THE FIX: 50Hz STREAM CONFIGURATION ---
+            liveCard.querySelector('.start-stream-btn').addEventListener('click', async () => {
                 const ctx = devices.get(device.id);
-                const btn = liveCard.querySelector('.set-100hz-btn');
+                const btn = liveCard.querySelector('.start-stream-btn');
                 
-                btn.innerText = 'Setting...';
+                if(!confirm("Configure sensor for 50Hz Auto-Stream?\n\nThis will stop polling and tell the sensor to broadcast Quaternions automatically.")) return;
+
+                btn.innerText = 'Configuring...';
                 btn.disabled = true;
                 
                 try {
-                    // Unlock
+                    // 1. Unlock
                     await unlock(ctx);
                     
-                    // Set return rate to 100Hz (0x09)
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x09, 0x00]);
+                    // 2. Set Rate to 50Hz (0x08)
+                    // Note: 0x06=10Hz, 0x07=20Hz, 0x08=50Hz, 0x09=100Hz
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x08, 0x00]); 
+                    await new Promise(r => setTimeout(r, 200));
+
+                    // 3. Set Content to Quaternion (0x59 / Bit 4 = 0x10) + Accel(0x01) + Angle(0x04) = 0x15
+                    // This ensures we get packet 0x59 automatically
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x02, 0x15, 0x00]); 
                     await new Promise(r => setTimeout(r, 200));
                     
-                    // Save configuration
+                    // 4. Save
                     await save(ctx);
                     
-                    btn.innerText = '✓ Set to 100Hz!';
-                    btn.classList.remove('bg-orange-600', 'hover:bg-orange-500');
+                    btn.innerText = '✓ Stream Configured (50Hz)';
+                    btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
                     btn.classList.add('bg-green-600');
                     
-                    alert('Output rate set to 100Hz and saved!\n\nThe sensor should now respond faster. Check the Hz indicator on the card.');
+                    alert('Configuration Sent!\n\nSensor should now be streaming Quaternions at ~50Hz.\nCheck the Hz indicator on the card.');
                 } catch(e) {
                     console.error(e);
-                    btn.innerText = 'Error - Try Again';
+                    btn.innerText = 'Error - Retry';
                     btn.disabled = false;
                 }
             });
@@ -550,22 +485,23 @@
                 
                 const packetType = buffer[i + 1];
                 
-                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
-                    if(i + 12 > buffer.length) continue;
+                // QUATERNION (0x59)
+                if(packetType === 0x59 && i + 2 < buffer.length) {
+                    if(i + 11 > buffer.length) continue;
                     
                     const getS = (offset) => {
                         let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
                         return v >= 32768 ? v - 65536 : v;
                     };
                     
-                    const q0 = getS(4) / 32768.0;
-                    const q1 = getS(6) / 32768.0;
-                    const q2 = getS(8) / 32768.0;
-                    const q3 = getS(10) / 32768.0;
+                    const q0 = getS(2) / 32768.0;
+                    const q1 = getS(4) / 32768.0;
+                    const q2 = getS(6) / 32768.0;
+                    const q3 = getS(8) / 32768.0;
                     
                     const modeLbl = ctx.ui.card.querySelector('.mode-indicator');
                     if(!ctx.quatMode) {
-                        modeLbl.innerText = "Mode: Quaternion (Polled)";
+                        modeLbl.innerText = "Mode: Quaternion (Stream)";
                         modeLbl.classList.remove('text-slate-500');
                         modeLbl.classList.add('text-green-500');
                         ctx.quatMode = true;
@@ -612,10 +548,11 @@
                         });
                     }
                     
-                    i += 19;
+                    i += 10; // WT901 packet length is 11 bytes
                     continue;
                 }
                 
+                // ANGLE (0x61) - Fallback
                 if(packetType === 0x61) {
                     if(ctx.quatMode) { i += 19; continue; }
                     if(i + 20 > buffer.length) continue;
@@ -651,6 +588,7 @@
                     continue;
                 }
                 
+                // BATTERY (0x64) inside 0x71 wrapper
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x64) {
                     if(i + 6 > buffer.length) continue;
                     const raw = (buffer[i + 5] << 8) | buffer[i + 4];
@@ -663,6 +601,7 @@
                     continue;
                 }
                 
+                // MAG CALIB DATA
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
                     if(i + 8 > buffer.length) continue;
                     const getS = (offset) => {
