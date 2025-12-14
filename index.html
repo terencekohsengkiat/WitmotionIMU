@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WitMotion Pro Dashboard</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .card { background-color: #1e293b; border: 1px solid #334155; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        .pulse-recording { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="min-h-screen p-6 flex flex-col">
+
+    <header class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
+        <div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">WitMotion <span class="text-blue-500">Pro</span></h1>
+            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
+        </div>
+        <div class="flex gap-3 items-center">
+            <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
+                <span class="text-slate-400">Target:</span> 
+                <span id="pollRateDisplay" class="text-green-400">--Hz</span>
+                <span class="text-slate-600 mx-1">|</span>
+                <span id="deviceCountDisplay" class="text-blue-400">0 sensors</span>
+            </div>
+            
+            <button id="addDeviceBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center shadow-lg hover:shadow-blue-500/20">
+                <span class="mr-2 text-lg">+</span> Connect Sensor
+            </button>
+            <button id="recordBtn" class="hidden bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/20 flex items-center">
+                <span class="mr-2">⏺</span> <span class="btn-text">Sync & Record</span>
+            </button>
+            <button id="exportBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center">
+                <span class="mr-2">↓</span> Export CSV
+            </button>
+        </div>
+    </header>
+
+    <div id="syncBanner" class="hidden mb-4 bg-red-900/50 border border-red-700 rounded-lg p-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl pulse-recording">🔴</span>
+            <div>
+                <div class="text-red-300 font-bold">Recording In Progress</div>
+                <div class="text-xs text-red-400 font-mono">
+                    Sync Time: <span id="syncTimeDisplay">--</span> | 
+                    Duration: <span id="durationDisplay">0:00</span> |
+                    Data Points: <span id="dataPointsDisplay">0</span>
+                </div>
+            </div>
+        </div>
+        <button id="stopRecordingBtn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded font-bold">
+            ■ Stop Recording
+        </button>
+    </div>
+
+    <div id="deviceContainer" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-min"></div>
+
+    <template id="deviceTemplate">
+        <div class="device-card card rounded-xl overflow-hidden relative flex flex-col">
+            <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-white device-name leading-tight">Sensor</h2>
+                    <span class="text-xs text-slate-500 font-mono device-id">ID: --</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="battery-indicator flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">
+                        <span>🔋</span><span class="bat-val">--%</span>
+                    </div>
+                    <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
+                    <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Compass Calibration">🧭</button>
+                    <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                </div>
+            </div>
+
+            <div class="canvas-container h-64 bg-slate-900 relative cursor-move">
+                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-mono font-bold bg-slate-900/80 px-2 py-1 rounded mode-indicator border border-slate-700">Mode: Auto (Default)</div>
+                <div class="absolute top-2 right-2 text-[10px] font-mono bg-slate-900/80 px-2 py-1 rounded border border-slate-700 quat-rate-indicator hidden">
+                    <span class="text-purple-400">Quat</span> <span class="quat-hz text-green-400">--Hz</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 divide-x divide-slate-700 border-t border-b border-slate-700 bg-slate-800/30">
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">PITCH (X)</div>
+                    <div class="text-xl font-mono font-bold text-red-400 val-ang-x">0.0°</div>
+                </div>
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">ROLL (Y)</div>
+                    <div class="text-xl font-mono font-bold text-green-400 val-ang-y">0.0°</div>
+                </div>
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">COMPASS (Z)</div>
+                    <div class="text-xl font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
+                </div>
+            </div>
+
+            <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
+            
+            <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
+                <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+                    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-xl">
+                        <h3 class="font-bold text-lg text-white">Configuration</h3>
+                        <button class="close-settings text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+                    </div>
+                    <div class="p-6 overflow-y-auto space-y-8">
+                        
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-blue-400 uppercase tracking-widest border-b border-slate-700 pb-1">1. Firmware</h4>
+                            <div class="flex gap-2">
+                                <span class="flex items-center px-3 bg-slate-900 border border-slate-600 rounded-l text-slate-500 text-sm">WT</span>
+                                <input type="text" class="rename-input bg-slate-900 border border-slate-600 text-white text-sm rounded-r block w-full p-2.5" placeholder="Wingfoil">
+                                <button class="burn-name-btn bg-blue-600 hover:bg-blue-700 text-white px-4 rounded text-sm font-bold">BURN</button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-purple-400 uppercase tracking-widest border-b border-slate-700 pb-1">2. Output Mode</h4>
+                            
+                            <div class="quat-status-box bg-slate-900/50 border border-slate-600 rounded p-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-slate-300">Quaternion Response:</span>
+                                    <span class="quat-status-indicator text-xs font-mono px-2 py-1 rounded bg-red-900/50 text-red-400">NOT RESPONDING</span>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1">Polling is active. Status shows if this sensor responds.</div>
+                            </div>
+                            
+                            <div class="bg-orange-900/30 border border-orange-700 rounded p-3">
+                                <div class="text-sm font-bold text-orange-300 mb-2">⚡ Set Output Rate</div>
+                                <div class="text-xs text-orange-200/70 mb-3">If your sensor shows low Hz (1-10Hz), click below to set it to 100Hz. This setting is saved to the sensor.</div>
+                                <button class="set-100hz-btn w-full bg-orange-600 hover:bg-orange-500 text-white p-2 rounded font-bold text-sm">
+                                    Set 100Hz Output Rate
+                                </button>
+                            </div>
+                            
+                            <button class="set-9axis-btn w-full bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex items-center justify-between group">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xl">🧭</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-bold text-slate-200">Set 9-Axis (Compass)</div>
+                                        <div class="text-[10px] text-slate-400">Enable Magnetometer</div>
+                                    </div>
+                                </div>
+                            </button>
+                            
+                            <button class="factory-reset-btn w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700 p-3 rounded flex items-center justify-between group">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xl">🔄</span>
+                                    <div class="text-left">
+                                        <div class="text-sm font-bold text-red-300">Factory Reset</div>
+                                        <div class="text-[10px] text-red-400">Restore default configuration</div>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Calibration</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button class="calib-accel-btn bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex flex-col items-center gap-2">
+                                    <span class="text-2xl">📏</span><span class="text-sm font-bold text-slate-200">Level Horizon</span>
+                                </button>
+                                <button class="calib-mag-btn bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex flex-col items-center gap-2">
+                                    <span class="text-2xl">🔄</span><span class="text-sm font-bold text-slate-200">Mag Calib</span>
+                                </button>
+                            </div>
+                            <div class="mag-viz-container hidden bg-black rounded border border-slate-700 p-2">
+                                <div class="text-center text-xs text-slate-400 mb-1">Live Magnetic Field (X vs Y)</div>
+                                <div class="h-48 w-full"><canvas class="mag-scatter-chart"></canvas></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-green-400 uppercase tracking-widest border-b border-slate-700 pb-1">4. Visualization Offset</h4>
+                            <div class="space-y-4">
+                                <div><div class="flex justify-between text-xs mb-1"><span>Pitch Offset (X)</span><span class="val-rot-x text-blue-400">0°</span></div><input type="range" class="slider-rot-x w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
+                                <div><div class="flex justify-between text-xs mb-1"><span>Roll Offset (Y)</span><span class="val-rot-y text-blue-400">0°</span></div><input type="range" class="slider-rot-y w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
+                                <div><div class="flex justify-between text-xs mb-1"><span>Yaw Offset (Z)</span><span class="val-rot-z text-blue-400">0°</span></div><input type="range" class="slider-rot-z w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const SERVICE_UUID = "0000ffe5-0000-1000-8000-00805f9a34fb";
+        const READ_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb";
+        const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
+
+        const devices = new Map();
+        let isRecording = false;
+        let recordingStartTime = 0;
+        let syncTimestamp = null;
+        let durationInterval = null;
+
+        let globalQuatPollInterval = null;
+        
+        // --- FIXED POLLING LOGIC ---
+        function updatePollingSystem() {
+            if (globalQuatPollInterval) {
+                clearInterval(globalQuatPollInterval);
+                globalQuatPollInterval = null;
+            }
+
+            const deviceCount = devices.size;
+            if (deviceCount === 0) {
+                document.getElementById('pollingStatus').classList.add('hidden');
+                return;
+            }
+
+            // TARGET: 30Hz for EVERYONE
+            // Instead of round-robin (one per tick), we poll ALL devices per tick.
+            const pollRate = 33; // 33ms ~ 30Hz
+            const effectiveHz = 30;
+            
+            document.getElementById('pollingStatus').classList.remove('hidden');
+            document.getElementById('pollRateDisplay').innerText = effectiveHz + 'Hz (Target)';
+            document.getElementById('deviceCountDisplay').innerText = deviceCount + ' sensor' + (deviceCount > 1 ? 's' : '');
+
+            globalQuatPollInterval = setInterval(() => {
+                devices.forEach(ctx => {
+                    if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
+                        sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
+                    }
+                });
+            }, pollRate);
+
+            console.log('Parallel Polling Active: ' + effectiveHz + 'Hz per device');
+        }
+
+        function loadSettings(id) {
+            const s = localStorage.getItem('sensor_' + id);
+            return s ? JSON.parse(s) : { rot: { x: 0, y: 0, z: 0 } };
+        }
+        function saveSettings(id, s) {
+            localStorage.setItem('sensor_' + id, JSON.stringify({ ...loadSettings(id), ...s }));
+        }
+
+        async function sendRaw(ctx, bytes) {
+            if(!ctx.device.gatt.connected || ctx.isWriting) return;
+            ctx.isWriting = true;
+            try { 
+                await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
+            } catch(e) { 
+                if (!e.message.includes('GATT')) console.error(e); 
+            }
+            ctx.isWriting = false;
+        }
+        
+        async function unlock(ctx) { 
+            await sendRaw(ctx, [0xFF, 0xAA, 0x69, 0x88, 0xB5]); 
+            await new Promise(r => setTimeout(r, 200)); 
+        }
+        async function save(ctx) { 
+            await sendRaw(ctx, [0xFF, 0xAA, 0x00, 0x00, 0x00]); 
+            await new Promise(r => setTimeout(r, 200)); 
+        }
+        
+        function removeDevice(id) {
+            const ctx = devices.get(id);
+            if (!ctx) return;
+            if (ctx.device.gatt.connected) ctx.device.gatt.disconnect();
+            clearInterval(ctx.battInterval);
+            clearInterval(ctx.magPollInterval);
+            if (ctx.ui && ctx.ui.card) ctx.ui.card.remove();
+            devices.delete(id);
+            updatePollingSystem();
+            if (devices.size === 0) {
+                document.getElementById('recordBtn').classList.add('hidden');
+                document.getElementById('exportBtn').classList.add('hidden');
+            }
+        }
+
+        document.getElementById('addDeviceBtn').addEventListener('click', async () => {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'WT' }], optionalServices: [SERVICE_UUID]
+                });
+
+                if (devices.has(device.id)) removeDevice(device.id);
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const readChar = await service.getCharacteristic(READ_UUID);
+                const writeChar = await service.getCharacteristic(WRITE_UUID);
+
+                const ui = createDeviceUI(device);
+                const ctx = { 
+                    device, server, writeChar, ui, 
+                    dataLog: [], 
+                    isMagCalibrating: false, 
+                    magPollInterval: null, 
+                    battInterval: null,
+                    quatReceiveCount: 0,
+                    lastQuatTime: Date.now(),
+                    quatMode: false,
+                    isWriting: false
+                };
+                devices.set(device.id, ctx);
+
+                device.addEventListener('gattserverdisconnected', () => {
+                    ui.card.classList.add('opacity-50', 'grayscale');
+                    ui.card.querySelector('.device-name').innerText += " (Offline)";
+                    clearInterval(ctx.battInterval);
+                    updatePollingSystem();
+                });
+
+                await readChar.startNotifications();
+                readChar.addEventListener('characteristicvaluechanged', (e) => handleData(e, device.id));
+
+                ctx.battInterval = setInterval(() => {
+                    if(device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
+                }, 30000);
+                setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]), 2000);
+
+                updatePollingSystem();
+
+                document.getElementById('recordBtn').classList.remove('hidden');
+                document.getElementById('exportBtn').classList.remove('hidden');
+            } catch (e) { console.error(e); }
+        });
+
+        function createDeviceUI(device) {
+            const template = document.getElementById('deviceTemplate');
+            const clone = template.content.cloneNode(true);
+            const container = document.getElementById('deviceContainer');
+            const settings = loadSettings(device.id);
+            
+            const card = clone.querySelector('.device-card');
+            card.dataset.id = device.id;
+            clone.querySelector('.device-name').innerText = device.name;
+            clone.querySelector('.device-id').innerText = device.id;
+            container.appendChild(clone);
+            
+            const liveCard = container.querySelector('.device-card[data-id="' + device.id + '"]');
+            const canvasContainer = liveCard.querySelector('.canvas-container');
+            const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f172a);
+            const camera = new THREE.PerspectiveCamera(50, canvasContainer.offsetWidth / canvasContainer.offsetHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(canvasContainer.offsetWidth, 256);
+            canvasContainer.appendChild(renderer.domElement);
+
+            new ResizeObserver(() => {
+                const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
+                if(w && h) { renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+            }).observe(canvasContainer);
+
+            scene.add(new THREE.AxesHelper(3));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const dl = new THREE.DirectionalLight(0xffffff, 1); dl.position.set(5, 10, 7); scene.add(dl);
+
+            const dataGroup = new THREE.Group();
+            dataGroup.userData = { currentQuat: new THREE.Quaternion(), targetQuat: new THREE.Quaternion() };
+            scene.add(dataGroup);
+
+            const alignmentGroup = new THREE.Group();
+            alignmentGroup.rotation.set(settings.rot.x * Math.PI/180, settings.rot.y * Math.PI/180, settings.rot.z * Math.PI/180);
+            dataGroup.add(alignmentGroup);
+
+            camera.position.set(3, 2, 5); camera.lookAt(0,0,0);
+
+            new THREE.OBJLoader().load('assets/sensor.obj', obj => {
+                const box = new THREE.Box3().setFromObject(obj);
+                const s = 3 / Math.max(box.max.x-box.min.x, box.max.y-box.min.y, box.max.z-box.min.z);
+                obj.scale.set(s, s, s);
+                obj.position.sub(box.getCenter(new THREE.Vector3()));
+                obj.traverse(c => { if(c.isMesh) c.material = new THREE.MeshPhongMaterial({ color: 0x3b82f6 }); });
+                alignmentGroup.add(obj);
+            }, undefined, () => {
+                alignmentGroup.add(new THREE.Mesh(new THREE.BoxGeometry(1.5,0.5,2), new THREE.MeshPhongMaterial({color:0xff4444})));
+            });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                if(dataGroup.userData.targetQuat) {
+                    dataGroup.userData.currentQuat.slerp(dataGroup.userData.targetQuat, 0.2); 
+                    dataGroup.quaternion.copy(dataGroup.userData.currentQuat);
+                }
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            const chart = new Chart(liveCard.querySelector('.device-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: Array(50).fill(''), datasets: [
+                    { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0 }
+                ]},
+                options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{display:false}, y:{grid:{color:'#334155'}} }, plugins:{legend:{labels:{color:'white'}}} }
+            });
+
+            const magChart = new Chart(liveCard.querySelector('.mag-scatter-chart').getContext('2d'), {
+                type: 'scatter',
+                data: { datasets: [{ label: 'XY Field', data: [], backgroundColor: '#fbbf24' }] },
+                options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
+            });
+
+            const modal = liveCard.querySelector('.settings-modal');
+            liveCard.querySelector('.settings-btn').addEventListener('click', () => {
+                liveCard.querySelector('.slider-rot-x').value = settings.rot.x;
+                liveCard.querySelector('.slider-rot-y').value = settings.rot.y;
+                liveCard.querySelector('.slider-rot-z').value = settings.rot.z;
+                
+                const ctx = devices.get(device.id);
+                const statusEl = liveCard.querySelector('.quat-status-indicator');
+                if (ctx && ctx.quatMode) {
+                    statusEl.innerText = 'RESPONDING ✓';
+                    statusEl.classList.remove('bg-red-900/50', 'text-red-400');
+                    statusEl.classList.add('bg-green-900/50', 'text-green-400');
+                } else {
+                    statusEl.innerText = 'NOT RESPONDING';
+                    statusEl.classList.remove('bg-green-900/50', 'text-green-400');
+                    statusEl.classList.add('bg-red-900/50', 'text-red-400');
+                }
+                
+                modal.classList.remove('hidden'); modal.classList.add('flex');
+            });
+            liveCard.querySelector('.close-settings').addEventListener('click', () => modal.classList.add('hidden') || modal.classList.remove('flex'));
+            liveCard.querySelector('.calib-btn').addEventListener('click', () => liveCard.querySelector('.settings-btn').click());
+
+            liveCard.querySelector('.burn-name-btn').addEventListener('click', async () => {
+                const n = liveCard.querySelector('.rename-input').value;
+                if(n && confirm('Rename to "WT' + n + '"?')) {
+                    const ctx = devices.get(device.id);
+                    await unlock(ctx);
+                    await sendRaw(ctx, new TextEncoder().encode("WT" + "WT" + n + "\r\n"));
+                    await save(ctx);
+                    alert("Name Sent! Restart sensor.");
+                }
+            });
+
+            // SET 100Hz OUTPUT RATE BUTTON
+            liveCard.querySelector('.set-100hz-btn').addEventListener('click', async () => {
+                const ctx = devices.get(device.id);
+                const btn = liveCard.querySelector('.set-100hz-btn');
+                
+                btn.innerText = 'Setting...';
+                btn.disabled = true;
+                
+                try {
+                    // Unlock
+                    await unlock(ctx);
+                    
+                    // Set return rate to 100Hz (0x09)
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x09, 0x00]);
+                    await new Promise(r => setTimeout(r, 200));
+                    
+                    // Save configuration
+                    await save(ctx);
+                    
+                    btn.innerText = '✓ Set to 100Hz!';
+                    btn.classList.remove('bg-orange-600', 'hover:bg-orange-500');
+                    btn.classList.add('bg-green-600');
+                    
+                    alert('Output rate set to 100Hz and saved!\n\nThe sensor should now respond faster. Check the Hz indicator on the card.');
+                } catch(e) {
+                    console.error(e);
+                    btn.innerText = 'Error - Try Again';
+                    btn.disabled = false;
+                }
+            });
+
+            liveCard.querySelector('.set-9axis-btn').addEventListener('click', async () => {
+                const ctx = devices.get(device.id);
+                await unlock(ctx);
+                await sendRaw(ctx, [0xFF, 0xAA, 0x24, 0x00, 0x00]); 
+                setTimeout(async () => { await save(ctx); alert("Compass Mode (9-Axis) Enabled."); }, 500);
+            });
+
+            liveCard.querySelector('.factory-reset-btn').addEventListener('click', async () => {
+                if(!confirm("WARNING: This will restore factory defaults (including 10Hz rate). Continue?")) return;
+                const ctx = devices.get(device.id);
+                await unlock(ctx);
+                await sendRaw(ctx, [0xFF, 0xAA, 0x00, 0x01, 0x00]);
+                await new Promise(r => setTimeout(r, 500));
+                alert("Factory reset command sent. Please restart the sensor.");
+            });
+
+            liveCard.querySelector('.calib-accel-btn').addEventListener('click', async () => {
+                if(!confirm("Sensor FLAT? Calibrating...")) return;
+                const ctx = devices.get(device.id);
+                await unlock(ctx);
+                await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x01, 0x00]); 
+                setTimeout(async () => { await save(ctx); alert("Accel Calibrated."); }, 5000);
+            });
+
+            liveCard.querySelector('.calib-mag-btn').addEventListener('click', async (e) => {
+                const ctx = devices.get(device.id);
+                const btn = e.currentTarget;
+                const viz = liveCard.querySelector('.mag-viz-container');
+                if(!ctx.isMagCalibrating) {
+                    if(!confirm("Start Compass Calibration?")) return;
+                    await unlock(ctx);
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x07, 0x00]); 
+                    ctx.isMagCalibrating = true;
+                    btn.classList.replace('bg-slate-700', 'bg-green-600');
+                    btn.querySelector('span:nth-child(2)').innerText = "FINISH (Save)";
+                    viz.classList.remove('hidden');
+                    ctx.magPollInterval = setInterval(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x3A, 0x00]), 100);
+                } else {
+                    clearInterval(ctx.magPollInterval);
+                    await unlock(ctx);
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x00, 0x00]); 
+                    setTimeout(async () => { await save(ctx); alert("Mag Saved."); }, 500);
+                    ctx.isMagCalibrating = false;
+                    btn.classList.replace('bg-green-600', 'bg-slate-700');
+                    btn.querySelector('span:nth-child(2)').innerText = "Mag Calib";
+                    viz.classList.add('hidden');
+                    magChart.data.datasets[0].data = []; magChart.update();
+                }
+            });
+
+            liveCard.querySelector('.disconnect-btn').addEventListener('click', () => {
+                if(confirm("Remove this sensor?")) removeDevice(device.id);
+            });
+
+            const updateAlign = () => {
+                const r = { x: liveCard.querySelector('.slider-rot-x').value, y: liveCard.querySelector('.slider-rot-y').value, z: liveCard.querySelector('.slider-rot-z').value };
+                alignmentGroup.rotation.set(r.x * Math.PI/180, r.y * Math.PI/180, r.z * Math.PI/180);
+                saveSettings(device.id, { rot: r });
+            };
+            liveCard.querySelectorAll('input[type="range"]').forEach(i => i.addEventListener('input', updateAlign));
+
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, card: liveCard };
+        }
+
+        function handleData(event, id) {
+            const ctx = devices.get(id);
+            if(!ctx) return;
+            
+            const buffer = new Uint8Array(event.target.value.buffer);
+            if(buffer.length < 2) return;
+
+            for(let i = 0; i < buffer.length - 1; i++) {
+                if(buffer[i] !== 0x55) continue;
+                
+                const packetType = buffer[i + 1];
+                
+                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
+                    if(i + 12 > buffer.length) continue;
+                    
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
+                    
+                    const q0 = getS(4) / 32768.0;
+                    const q1 = getS(6) / 32768.0;
+                    const q2 = getS(8) / 32768.0;
+                    const q3 = getS(10) / 32768.0;
+                    
+                    const modeLbl = ctx.ui.card.querySelector('.mode-indicator');
+                    if(!ctx.quatMode) {
+                        modeLbl.innerText = "Mode: Quaternion (Polled)";
+                        modeLbl.classList.remove('text-slate-500');
+                        modeLbl.classList.add('text-green-500');
+                        ctx.quatMode = true;
+                        ctx.ui.card.querySelector('.quat-rate-indicator').classList.remove('hidden');
+                    }
+
+                    ctx.quatReceiveCount++;
+                    const now = Date.now();
+                    if (now - ctx.lastQuatTime >= 1000) {
+                        ctx.ui.card.querySelector('.quat-hz').innerText = ctx.quatReceiveCount + 'Hz';
+                        ctx.quatReceiveCount = 0;
+                        ctx.lastQuatTime = now;
+                    }
+
+                    const q = new THREE.Quaternion(q1, q3, -q2, q0);
+
+                    const vNose = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+                    const vWing = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+
+                    const pitchDeg = Math.asin(Math.max(-1, Math.min(1, vNose.y))) * (180/Math.PI);
+                    const wy = Math.max(-1, Math.min(1, vWing.y));
+                    let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
+                    let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
+                    if(compass < 0) compass += 360;
+
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
+
+                    if (ctx.ui.mesh) ctx.ui.mesh.userData.targetQuat.copy(q);
+
+                    const c = ctx.ui.chart;
+                    c.data.datasets[0].data.push(pitchDeg);
+                    c.data.datasets[1].data.push(rollDeg);
+                    c.data.datasets[2].data.push(compass);
+                    if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                    c.update();
+                    
+                    if(isRecording) {
+                        ctx.dataLog.push({ 
+                            t: Date.now() - recordingStartTime, 
+                            pitch: pitchDeg, roll: rollDeg, yaw: compass,
+                            q0, q1, q2, q3
+                        });
+                    }
+                    
+                    i += 19;
+                    continue;
+                }
+                
+                if(packetType === 0x61) {
+                    if(ctx.quatMode) { i += 19; continue; }
+                    if(i + 20 > buffer.length) continue;
+                    
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
+                    
+                    const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
+                    const pitch = angX, roll = -angY;
+                    let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
+
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
+
+                    if (ctx.ui.mesh) {
+                        const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
+                        ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
+                    }
+                    
+                    const c = ctx.ui.chart;
+                    c.data.datasets[0].data.push(pitch); 
+                    c.data.datasets[1].data.push(roll); 
+                    c.data.datasets[2].data.push(compass);
+                    if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                    c.update();
+                    
+                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: compass });
+                    
+                    i += 19;
+                    continue;
+                }
+                
+                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x64) {
+                    if(i + 6 > buffer.length) continue;
+                    const raw = (buffer[i + 5] << 8) | buffer[i + 4];
+                    const voltage = raw / 100;
+                    let pct = Math.round((voltage - 3.5) / (4.2 - 3.5) * 100);
+                    if(pct < 0) pct = 0; if(pct > 100) pct = 100;
+                    ctx.ui.card.querySelector('.bat-val').innerText = pct + "%";
+                    if(pct < 20) ctx.ui.card.querySelector('.battery-indicator').classList.replace('text-slate-400', 'text-red-500');
+                    i += 19;
+                    continue;
+                }
+                
+                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
+                    if(i + 8 > buffer.length) continue;
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
+                    const mc = ctx.ui.magChart;
+                    mc.data.datasets[0].data.push({ x: getS(4), y: getS(6) });
+                    if(mc.data.datasets[0].data.length > 300) mc.data.datasets[0].data.shift();
+                    mc.update();
+                    i += 19;
+                    continue;
+                }
+            }
+        }
+
+        function startSyncRecording() {
+            syncTimestamp = new Date().toISOString();
+            recordingStartTime = Date.now();
+            isRecording = true;
+            
+            devices.forEach(ctx => { ctx.dataLog = []; });
+            
+            document.getElementById('recordBtn').classList.add('hidden');
+            document.getElementById('syncBanner').classList.remove('hidden');
+            document.getElementById('syncTimeDisplay').innerText = syncTimestamp;
+            
+            durationInterval = setInterval(updateDurationDisplay, 1000);
+            
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.value = 880;
+                gain.gain.value = 0.3;
+                osc.start();
+                setTimeout(() => osc.stop(), 150);
+            } catch(e) {}
+            
+            console.log('Recording started - Sync timestamp: ' + syncTimestamp);
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            clearInterval(durationInterval);
+            
+            document.getElementById('syncBanner').classList.add('hidden');
+            document.getElementById('recordBtn').classList.remove('hidden');
+            
+            let totalPoints = 0;
+            devices.forEach(ctx => totalPoints += ctx.dataLog.length);
+            
+            console.log('Recording stopped - Total data points: ' + totalPoints);
+            
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.value = 440;
+                gain.gain.value = 0.3;
+                osc.start();
+                setTimeout(() => { osc.frequency.value = 330; }, 100);
+                setTimeout(() => osc.stop(), 200);
+            } catch(e) {}
+        }
+
+        function updateDurationDisplay() {
+            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const mins = Math.floor(elapsed / 60);
+            const secs = elapsed % 60;
+            document.getElementById('durationDisplay').innerText = mins + ':' + secs.toString().padStart(2, '0');
+            
+            let totalPoints = 0;
+            devices.forEach(ctx => totalPoints += ctx.dataLog.length);
+            document.getElementById('dataPointsDisplay').innerText = totalPoints.toLocaleString();
+        }
+
+        document.getElementById('recordBtn').addEventListener('click', startSyncRecording);
+        document.getElementById('stopRecordingBtn').addEventListener('click', stopRecording);
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            if (devices.size === 0) { alert("No devices connected!"); return; }
+            
+            let hasData = false;
+            devices.forEach(ctx => { if(ctx.dataLog.length > 0) hasData = true; });
+            if (!hasData) { alert("No recorded data to export. Click 'Sync & Record' first!"); return; }
+            
+            devices.forEach((ctx, id) => {
+                const deviceName = ctx.device.name || 'Unknown';
+                const mode = ctx.quatMode ? 'Quaternion' : 'Euler';
+                
+                let csv = '# WitMotion Pro - Session Export\n';
+                csv += '# Session Sync: ' + (syncTimestamp || 'Not synchronized') + '\n';
+                csv += '# Device: ' + deviceName + ' (ID: ' + id + ')\n';
+                csv += '# Mode: ' + mode + '\n';
+                csv += '# Data Points: ' + ctx.dataLog.length + '\n';
+                csv += '# Export Time: ' + new Date().toISOString() + '\n#\n';
+                
+                if (ctx.quatMode && ctx.dataLog[0] && ctx.dataLog[0].q0 !== undefined) {
+                    csv += 'Time(ms),Pitch,Roll,Yaw,Q0,Q1,Q2,Q3\n';
+                    csv += ctx.dataLog.map(r => 
+                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
+                    ).join('\n');
+                } else {
+                    csv += 'Time(ms),Pitch,Roll,Yaw\n';
+                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3)).join('\n');
+                }
+                
+                const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
+                const a = document.createElement('a'); 
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); 
+                a.download = deviceName + '_' + timestamp + '.csv'; 
+                a.click();
+            });
+            
+            alert('Exported ' + devices.size + ' CSV file(s).\nAll files share the same sync timestamp for alignment.');
+        });
+    </script>
+</body>
+</html>
