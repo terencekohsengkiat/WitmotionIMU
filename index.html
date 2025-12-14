@@ -321,7 +321,7 @@
 
                 const ui = createDeviceUI(device);
                 
-                // Initialize context with new velocity variables
+                // Initialize context
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
@@ -332,8 +332,9 @@
                     lastQuatTime: Date.now(),
                     quatMode: false,
                     isWriting: false,
-                    lastRoll: 0,              // <--- Init Value
-                    lastRollTime: Date.now()  // <--- Init Time
+                    lastRoll: 0,              
+                    lastRollTime: Date.now(),
+                    filteredRollVel: 0        // <--- NEW: Filtered Velocity State
                 };
                 devices.set(device.id, ctx);
 
@@ -435,17 +436,16 @@
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
             });
 
-            // NEW: Phase Space Chart Initialization
             const phaseChart = new Chart(liveCard.querySelector('.phase-chart').getContext('2d'), {
                 type: 'scatter',
                 data: {
                     datasets: [{
                         label: 'Roll Phase',
                         data: [],
-                        borderColor: '#4ade80', // Green Line
+                        borderColor: '#4ade80',
                         borderWidth: 2,         
-                        showLine: true,         // Show connection lines
-                        pointRadius: 0,         // Hide individual dots
+                        showLine: true,         
+                        pointRadius: 0,
                         tension: 0.1
                     }]
                 },
@@ -653,22 +653,27 @@
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
                     if(compass < 0) compass += 360;
 
-                    // --- NEW VELOCITY & PHASE SPACE LOGIC ---
+                    // --- SMOOTHED VELOCITY LOGIC ---
                     const dt = (now - ctx.lastRollTime) / 1000; // seconds
                     if (dt > 0) {
                         const rollDiff = rollDeg - ctx.lastRoll;
-                        const rollVel = rollDiff / dt; // deg/s
+                        const rawVel = rollDiff / dt; // deg/s
+                        
+                        // Simple Low Pass Filter (alpha = 0.1)
+                        // This acts similarly to a 1-Euro filter in that it smooths jitter.
+                        // You can tweak 0.1: Lower = Smoother but laggier. Higher = More responsive but noisier.
+                        ctx.filteredRollVel = (ctx.filteredRollVel * 0.9) + (rawVel * 0.1);
 
                         if (ctx.ui.phaseChart) {
                             const pc = ctx.ui.phaseChart;
-                            pc.data.datasets[0].data.push({ x: rollDeg, y: rollVel });
+                            pc.data.datasets[0].data.push({ x: rollDeg, y: ctx.filteredRollVel });
                             if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
                             pc.update();
                         }
                     }
                     ctx.lastRoll = rollDeg;
                     ctx.lastRollTime = now;
-                    // ----------------------------------------
+                    // --------------------------------
 
                     ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
