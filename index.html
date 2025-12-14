@@ -39,7 +39,7 @@
             <button id="addDeviceBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center shadow-lg hover:shadow-blue-500/20">
                 <span class="mr-2 text-lg">+</span> Connect Sensor
             </button>
-            <button id="recordBtn" class="hidden bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/20 flex items-center">
+            <button id="recordBtn" class="hidden bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/20 flex items-center"
                 <span class="mr-2">⏺</span> <span class="btn-text">Sync & Record</span>
             </button>
             <button id="exportBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center">
@@ -107,6 +107,23 @@
             </div>
 
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
+
+            <div class="h-64 bg-slate-900/50 p-2 border-t border-slate-700 relative">
+                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-bold tracking-wider z-10">PHASE SPACE (ROLL)</div>
+                
+                <canvas class="phase-chart"></canvas>
+                
+                <div class="absolute top-4 right-4 w-20 h-20 bg-slate-800/90 rounded-full border border-slate-600 flex items-center justify-center shadow-lg z-10 backdrop-blur-sm" title="Y-Axis Heading">
+                    <div class="absolute text-[8px] font-mono text-slate-500 top-1">N</div>
+                    <div class="absolute text-[8px] font-mono text-slate-500 bottom-1">S</div>
+                    <div class="absolute text-[8px] font-mono text-slate-500 left-1">W</div>
+                    <div class="absolute text-[8px] font-mono text-slate-500 right-1">E</div>
+                    
+                    <div class="compass-arrow text-3xl text-blue-400 transition-transform duration-75 origin-center">
+                        ➤
+                    </div>
+                </div>
+            </div>
             
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
                 <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
@@ -327,7 +344,9 @@
                     quatReceiveCount: 0,
                     lastQuatTime: Date.now(),
                     quatMode: false,
-                    isWriting: false
+                    isWriting: false,
+                    lastRoll: 0,
+                    lastRollTime: Date.now()
                 };
                 devices.set(device.id, ctx);
 
@@ -429,6 +448,43 @@
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
             });
 
+            const phaseChart = new Chart(liveCard.querySelector('.phase-chart').getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Roll Phase',
+                        data: [],
+                        borderColor: '#4ade80', // Green
+                        backgroundColor: 'rgba(74, 222, 128, 0.5)',
+                        borderWidth: 1,
+                        pointRadius: 2
+                    }]
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Roll Angle (°)', color: '#64748b', font: {size: 10} },
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: { 
+                            title: { display: true, text: 'Velocity (°/s)', color: '#64748b', font: {size: 10} },
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+            
+            const compassArrow = liveCard.querySelector('.compass-arrow');
+            
+            // Add phaseChart and compassArrow to the returned object
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, compassArrow, card: liveCard };
+            
             const modal = liveCard.querySelector('.settings-modal');
             liveCard.querySelector('.settings-btn').addEventListener('click', () => {
                 liveCard.querySelector('.slider-rot-x').value = settings.rot.x;
@@ -612,6 +668,25 @@
                     const pitchDeg = Math.asin(Math.max(-1, Math.min(1, vNose.y))) * (180/Math.PI);
                     const wy = Math.max(-1, Math.min(1, vWing.y));
                     let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
+                    const dt = (now - ctx.lastRollTime) / 1000; // Convert ms to seconds
+                    
+                    if (dt > 0) {
+                        const rollDiff = rollDeg - ctx.lastRoll;
+                        const rollVel = rollDiff / dt; // Velocity in deg/s
+                    
+                        // Update the Phase Chart (if it exists)
+                        if (ctx.ui.phaseChart) {
+                            const pc = ctx.ui.phaseChart;
+                            pc.data.datasets[0].data.push({ x: rollDeg, y: rollVel });
+                            // Keep only last 100 points to prevent lag
+                            if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
+                            pc.update();
+                        }
+                    }
+                    
+                    // Update state for next loop
+                    ctx.lastRoll = rollDeg;
+                    ctx.lastRollTime = now;
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
                     if(compass < 0) compass += 360;
 
