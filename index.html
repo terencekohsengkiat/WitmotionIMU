@@ -29,6 +29,13 @@
             <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
         </div>
         <div class="flex gap-3 items-center">
+            <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
+                <span class="text-slate-400">Target:</span> 
+                <span class="text-green-400">50Hz (Stream)</span>
+                <span class="text-slate-600 mx-1">|</span>
+                <span id="deviceCountDisplay" class="text-blue-400">0 sensors</span>
+            </div>
+            
             <button id="addDeviceBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center shadow-lg hover:shadow-blue-500/20">
                 <span class="mr-2 text-lg">+</span> Connect Sensor
             </button>
@@ -124,7 +131,7 @@
                             <div class="bg-blue-900/30 border border-blue-700 rounded p-3 mb-2">
                                 <div class="text-sm font-bold text-blue-300 mb-2">🚀 High Speed Stream</div>
                                 <div class="text-xs text-blue-200/70 mb-3">
-                                    Click this to configure the sensor to automatically broadcast Quaternions at 50Hz. No polling required.
+                                    Click this to force the sensor into 50Hz Auto-Stream mode.
                                 </div>
                                 <button class="start-stream-btn w-full bg-blue-600 hover:bg-blue-500 text-white p-2 rounded font-bold text-sm">
                                     Start 50Hz Stream (Auto)
@@ -184,6 +191,8 @@
         let recordingStartTime = 0;
         let syncTimestamp = null;
         let durationInterval = null;
+        
+        let statusInterval = null;
 
         function loadSettings(id) {
             const s = localStorage.getItem('sensor_' + id);
@@ -221,11 +230,25 @@
             clearInterval(ctx.magPollInterval);
             if (ctx.ui && ctx.ui.card) ctx.ui.card.remove();
             devices.delete(id);
+            updateHeaderStatus();
             if (devices.size === 0) {
                 document.getElementById('recordBtn').classList.add('hidden');
                 document.getElementById('exportBtn').classList.add('hidden');
             }
         }
+
+        function updateHeaderStatus() {
+            const count = devices.size;
+            if (count > 0) {
+                document.getElementById('pollingStatus').classList.remove('hidden');
+                document.getElementById('deviceCountDisplay').innerText = count + ' sensor' + (count > 1 ? 's' : '');
+            } else {
+                document.getElementById('pollingStatus').classList.add('hidden');
+            }
+        }
+
+        // Run checking loop for connection health
+        statusInterval = setInterval(updateHeaderStatus, 2000);
 
         document.getElementById('addDeviceBtn').addEventListener('click', async () => {
             try {
@@ -258,6 +281,7 @@
                     ui.card.classList.add('opacity-50', 'grayscale');
                     ui.card.querySelector('.device-name').innerText += " (Offline)";
                     clearInterval(ctx.battInterval);
+                    updateHeaderStatus();
                 });
 
                 await readChar.startNotifications();
@@ -267,6 +291,8 @@
                     if(device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
                 }, 30000);
                 setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]), 2000);
+
+                updateHeaderStatus();
 
                 document.getElementById('recordBtn').classList.remove('hidden');
                 document.getElementById('exportBtn').classList.remove('hidden');
@@ -370,38 +396,38 @@
                 }
             });
 
-            // --- THE FIX: 50Hz STREAM CONFIGURATION ---
+            // --- BRUTE FORCE STREAM CONFIGURATION ---
             liveCard.querySelector('.start-stream-btn').addEventListener('click', async () => {
                 const ctx = devices.get(device.id);
                 const btn = liveCard.querySelector('.start-stream-btn');
                 
-                if(!confirm("Configure sensor for 50Hz Auto-Stream?\n\nThis will stop polling and tell the sensor to broadcast Quaternions automatically.")) return;
+                if(!confirm("Start 50Hz Stream Sequence?\nDon't close settings until green.")) return;
 
-                btn.innerText = 'Configuring...';
+                btn.innerText = 'Initializing...';
                 btn.disabled = true;
                 
                 try {
-                    // 1. Unlock
-                    await unlock(ctx);
-                    
-                    // 2. Set Rate to 50Hz (0x08)
-                    // Note: 0x06=10Hz, 0x07=20Hz, 0x08=50Hz, 0x09=100Hz
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x08, 0x00]); 
-                    await new Promise(r => setTimeout(r, 200));
+                    // Try 3 times to ensure it sticks
+                    for(let i=1; i<=3; i++) {
+                        btn.innerText = `Attempt ${i}/3: Unlocking...`;
+                        await unlock(ctx);
+                        
+                        btn.innerText = `Attempt ${i}/3: Writing 50Hz...`;
+                        await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x08, 0x00]); 
+                        await new Promise(r => setTimeout(r, 250));
 
-                    // 3. Set Content to Quaternion (0x59 / Bit 4 = 0x10) + Accel(0x01) + Angle(0x04) = 0x15
-                    // This ensures we get packet 0x59 automatically
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x02, 0x15, 0x00]); 
-                    await new Promise(r => setTimeout(r, 200));
+                        btn.innerText = `Attempt ${i}/3: Writing Output...`;
+                        await sendRaw(ctx, [0xFF, 0xAA, 0x02, 0x15, 0x00]); 
+                        await new Promise(r => setTimeout(r, 250));
+                        
+                        await save(ctx);
+                    }
                     
-                    // 4. Save
-                    await save(ctx);
-                    
-                    btn.innerText = '✓ Stream Configured (50Hz)';
+                    btn.innerText = '✓ Stream Active!';
                     btn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
                     btn.classList.add('bg-green-600');
                     
-                    alert('Configuration Sent!\n\nSensor should now be streaming Quaternions at ~50Hz.\nCheck the Hz indicator on the card.');
+                    alert('Sensor configured. Check card for "Mode: 50Hz Stream"');
                 } catch(e) {
                     console.error(e);
                     btn.innerText = 'Error - Retry';
@@ -501,7 +527,7 @@
                     
                     const modeLbl = ctx.ui.card.querySelector('.mode-indicator');
                     if(!ctx.quatMode) {
-                        modeLbl.innerText = "Mode: Quaternion (Stream)";
+                        modeLbl.innerText = "Mode: 50Hz Stream (Stable)";
                         modeLbl.classList.remove('text-slate-500');
                         modeLbl.classList.add('text-green-500');
                         ctx.quatMode = true;
@@ -548,7 +574,7 @@
                         });
                     }
                     
-                    i += 10; // WT901 packet length is 11 bytes
+                    i += 10; 
                     continue;
                 }
                 
