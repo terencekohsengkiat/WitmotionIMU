@@ -30,8 +30,8 @@
         </div>
         <div class="flex gap-3 items-center">
             <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-                <span class="text-slate-400">Poll:</span> 
-                <span id="pollRateDisplay" class="text-green-400">--Hz</span>
+                <span class="text-slate-400">Staggered Poll:</span> 
+                <span id="pollRateDisplay" class="text-green-400">--ms</span>
                 <span class="text-slate-600 mx-1">|</span>
                 <span id="deviceCountDisplay" class="text-blue-400">0 sensors</span>
             </div>
@@ -218,39 +218,47 @@
         let durationInterval = null;
 
         let globalQuatPollInterval = null;
+        let pollIndex = 0; // Tracks which sensor is next in line
         
-        // --- FIXED POLLING LOGIC ---
+        // --- STAGGERED POLLING LOGIC ---
         function updatePollingSystem() {
             if (globalQuatPollInterval) {
                 clearInterval(globalQuatPollInterval);
                 globalQuatPollInterval = null;
             }
 
-            const deviceCount = devices.size;
-            if (deviceCount === 0) {
+            const count = devices.size;
+            if (count === 0) {
                 document.getElementById('pollingStatus').classList.add('hidden');
                 return;
             }
 
-            // Polling Target: ~25Hz. 
-            // We use 40ms interval. Every tick, we ask ALL connected sensors for a Quaternion.
-            const pollRate = 40; 
-            const effectiveHz = Math.round(1000/pollRate);
+            // Target: 25Hz per sensor = 40ms cycle per sensor.
+            // If we have 4 sensors, we need to send a command every 10ms.
+            // Step Delay = 40ms / DeviceCount.
+            // (e.g., 4 sensors -> 10ms step. 2 sensors -> 20ms step.)
+            const targetCycle = 40; // 40ms = 25Hz
+            const stepDelay = Math.max(10, Math.floor(targetCycle / count)); // Don't go faster than 10ms
             
             document.getElementById('pollingStatus').classList.remove('hidden');
-            document.getElementById('pollRateDisplay').innerText = effectiveHz + 'Hz (Polling)';
-            document.getElementById('deviceCountDisplay').innerText = deviceCount + ' sensor' + (deviceCount > 1 ? 's' : '');
+            document.getElementById('pollRateDisplay').innerText = `Step: ${stepDelay}ms`;
+            document.getElementById('deviceCountDisplay').innerText = count + ' sensor' + (count > 1 ? 's' : '');
 
             globalQuatPollInterval = setInterval(() => {
-                devices.forEach(ctx => {
-                    // Send 0x51 Request to all connected sensors
-                    if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
-                        sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
-                    }
-                });
-            }, pollRate);
+                const deviceArray = Array.from(devices.values());
+                if (deviceArray.length === 0) return;
 
-            console.log('Parallel Polling Active: ' + effectiveHz + 'Hz per device');
+                // Pick the next sensor in the round-robin
+                const ctx = deviceArray[pollIndex % deviceArray.length];
+                pollIndex++; // Move to next for next tick
+
+                // Ask ONLY this sensor
+                if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
+                    sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
+                }
+            }, stepDelay);
+
+            console.log(`Staggered Polling: ${count} devices, ${stepDelay}ms steps`);
         }
 
         function loadSettings(id) {
@@ -267,7 +275,7 @@
             try { 
                 await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
             } catch(e) { 
-                // Ignore GATT operation errors (common during rapid polling)
+                // Ignore GATT errors
             }
             ctx.isWriting = false;
         }
