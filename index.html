@@ -107,22 +107,6 @@
             </div>
 
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
-
-            <div class="h-64 bg-slate-900/50 p-2 border-t border-slate-700 relative">
-                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-bold tracking-wider z-10">PHASE SPACE (ROLL)</div>
-                
-                <canvas class="phase-chart"></canvas>
-                
-                <div class="absolute top-4 right-4 w-20 h-20 bg-slate-800/90 rounded-full border border-slate-600 flex items-center justify-center shadow-lg z-10 backdrop-blur-sm" title="Y-Axis Heading">
-                    <div class="absolute text-[8px] font-mono text-slate-500 top-1">N</div>
-                    <div class="absolute text-[8px] font-mono text-slate-500 bottom-1">S</div>
-                    <div class="absolute text-[8px] font-mono text-slate-500 left-1">W</div>
-                    <div class="absolute text-[8px] font-mono text-slate-500 right-1">E</div>
-                    
-                    <div class="compass-arrow text-3xl text-blue-400 transition-transform duration-75 origin-center">
-                        ➤
-                    </div>
-                </div>
             </div>
             
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
@@ -455,6 +439,10 @@
                         label: 'Roll Phase',
                         data: [],
                         borderColor: '#4ade80', // Green
+                        borderWidth: 2,         // Thicker line
+                        showLine: true,         // <--- ENABLE LINES
+                        pointRadius: 0,         // <--- HIDE DOTS
+                        tension: 0.1,            // <--- Slight smoothing (optional)
                         backgroundColor: 'rgba(74, 222, 128, 0.5)',
                         borderWidth: 1,
                         pointRadius: 2
@@ -479,11 +467,9 @@
                     plugins: { legend: { display: false } }
                 }
             });
-            
-            const compassArrow = liveCard.querySelector('.compass-arrow');
-            
+                        
             // Add phaseChart and compassArrow to the returned object
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, compassArrow, card: liveCard };
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, card: liveCard };
             
             const modal = liveCard.querySelector('.settings-modal');
             liveCard.querySelector('.settings-btn').addEventListener('click', () => {
