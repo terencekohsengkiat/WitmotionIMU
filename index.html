@@ -39,7 +39,7 @@
             <button id="addDeviceBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center shadow-lg hover:shadow-blue-500/20">
                 <span class="mr-2 text-lg">+</span> Connect Sensor
             </button>
-            <button id="recordBtn" class="hidden bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/20 flex items-center"
+            <button id="recordBtn" class="hidden bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-green-500/20 flex items-center">
                 <span class="mr-2">⏺</span> <span class="btn-text">Sync & Record</span>
             </button>
             <button id="exportBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center">
@@ -107,6 +107,10 @@
             </div>
 
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
+            
+            <div class="h-64 bg-slate-900/50 p-2 border-t border-slate-700 relative">
+                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-bold tracking-wider z-10">PHASE SPACE (ROLL)</div>
+                <canvas class="phase-chart"></canvas>
             </div>
             
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
@@ -235,9 +239,6 @@
             }
 
             // Target: 25Hz per sensor = 40ms cycle per sensor.
-            // If we have 4 sensors, we need to send a command every 10ms.
-            // Step Delay = 40ms / DeviceCount.
-            // (e.g., 4 sensors -> 10ms step. 2 sensors -> 20ms step.)
             const targetCycle = 40; // 40ms = 25Hz
             const stepDelay = Math.max(10, Math.floor(targetCycle / count)); // Don't go faster than 10ms
             
@@ -319,6 +320,8 @@
                 const writeChar = await service.getCharacteristic(WRITE_UUID);
 
                 const ui = createDeviceUI(device);
+                
+                // Initialize context with new velocity variables
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
@@ -329,8 +332,8 @@
                     lastQuatTime: Date.now(),
                     quatMode: false,
                     isWriting: false,
-                    lastRoll: 0,
-                    lastRollTime: Date.now()
+                    lastRoll: 0,              // <--- Init Value
+                    lastRollTime: Date.now()  // <--- Init Time
                 };
                 devices.set(device.id, ctx);
 
@@ -432,20 +435,18 @@
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
             });
 
+            // NEW: Phase Space Chart Initialization
             const phaseChart = new Chart(liveCard.querySelector('.phase-chart').getContext('2d'), {
                 type: 'scatter',
                 data: {
                     datasets: [{
                         label: 'Roll Phase',
                         data: [],
-                        borderColor: '#4ade80', // Green
-                        borderWidth: 2,         // Thicker line
-                        showLine: true,         // <--- ENABLE LINES
-                        pointRadius: 0,         // <--- HIDE DOTS
-                        tension: 0.1,            // <--- Slight smoothing (optional)
-                        backgroundColor: 'rgba(74, 222, 128, 0.5)',
-                        borderWidth: 1,
-                        pointRadius: 2
+                        borderColor: '#4ade80', // Green Line
+                        borderWidth: 2,         
+                        showLine: true,         // Show connection lines
+                        pointRadius: 0,         // Hide individual dots
+                        tension: 0.1
                     }]
                 },
                 options: {
@@ -467,10 +468,7 @@
                     plugins: { legend: { display: false } }
                 }
             });
-                        
-            // Add phaseChart and compassArrow to the returned object
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, card: liveCard };
-            
+
             const modal = liveCard.querySelector('.settings-modal');
             liveCard.querySelector('.settings-btn').addEventListener('click', () => {
                 liveCard.querySelector('.slider-rot-x').value = settings.rot.x;
@@ -505,7 +503,6 @@
                 }
             });
 
-            // RESTORED: ENABLE QUATERNION BUTTON
             liveCard.querySelector('.enable-quat-btn').addEventListener('click', async () => {
                 if(!confirm("Enable Quaternion Mode?")) return;
                 const ctx = devices.get(device.id);
@@ -514,7 +511,6 @@
                 setTimeout(async () => { await save(ctx); alert("Quaternion Mode Enabled. Check 'Mode: Quaternion' on card."); }, 500);
             });
 
-            // SET 100Hz OUTPUT RATE BUTTON
             liveCard.querySelector('.set-100hz-btn').addEventListener('click', async () => {
                 const ctx = devices.get(device.id);
                 const btn = liveCard.querySelector('.set-100hz-btn');
@@ -601,7 +597,7 @@
             };
             liveCard.querySelectorAll('input[type="range"]').forEach(i => i.addEventListener('input', updateAlign));
 
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, card: liveCard };
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, card: liveCard };
         }
 
         function handleData(event, id) {
@@ -654,27 +650,25 @@
                     const pitchDeg = Math.asin(Math.max(-1, Math.min(1, vNose.y))) * (180/Math.PI);
                     const wy = Math.max(-1, Math.min(1, vWing.y));
                     let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
-                    const dt = (now - ctx.lastRollTime) / 1000; // Convert ms to seconds
-                    
+                    let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
+                    if(compass < 0) compass += 360;
+
+                    // --- NEW VELOCITY & PHASE SPACE LOGIC ---
+                    const dt = (now - ctx.lastRollTime) / 1000; // seconds
                     if (dt > 0) {
                         const rollDiff = rollDeg - ctx.lastRoll;
-                        const rollVel = rollDiff / dt; // Velocity in deg/s
-                    
-                        // Update the Phase Chart (if it exists)
+                        const rollVel = rollDiff / dt; // deg/s
+
                         if (ctx.ui.phaseChart) {
                             const pc = ctx.ui.phaseChart;
                             pc.data.datasets[0].data.push({ x: rollDeg, y: rollVel });
-                            // Keep only last 100 points to prevent lag
                             if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
                             pc.update();
                         }
                     }
-                    
-                    // Update state for next loop
                     ctx.lastRoll = rollDeg;
                     ctx.lastRollTime = now;
-                    let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
-                    if(compass < 0) compass += 360;
+                    // ----------------------------------------
 
                     ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
