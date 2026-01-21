@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WitMotion Pro Dashboard (Smoothed)</title>
+    <title>Inertial Measurement Unit Dashboard</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
@@ -25,8 +25,8 @@
 
     <header class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
         <div>
-            <h1 class="text-3xl font-bold text-white tracking-tight">WitMotion <span class="text-blue-500">Pro</span></h1>
-            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Smoothed Sensor Data</p>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Inertial Measurement Unit <span class="text-blue-500">Dashboard</span></h1>
+            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">by Terence Koh</p>
         </div>
         <div class="flex gap-3 items-center">
             <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
@@ -101,12 +101,17 @@
                     <div class="text-xl font-mono font-bold text-green-400 val-ang-y">0.0°</div>
                 </div>
                 <div class="p-3 text-center">
-                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">ACCEL Y (g)</div>
-                    <div class="text-xl font-mono font-bold text-blue-400 val-ang-z">0.00g</div>
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">COMPASS (Z)</div>
+                    <div class="text-xl font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
                 </div>
             </div>
 
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
+            
+            <div class="h-64 bg-slate-900/50 p-2 border-t border-slate-700 relative">
+                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-bold tracking-wider z-10">PHASE SPACE (ROLL)</div>
+                <canvas class="phase-chart"></canvas>
+            </div>
             
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
                 <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
@@ -211,7 +216,7 @@
         const READ_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb";
         const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
-        // --- 1 EURO FILTER (RESTORED FROM OLD CODE) ---
+        // --- 1 EURO FILTER IMPLEMENTATION (From Reference) ---
         class LowPassFilter {
             constructor(alpha){this.alpha=alpha;this.lastVal=null;}
             filterWithAlpha(val, alpha){
@@ -244,8 +249,8 @@
         let durationInterval = null;
 
         let globalQuatPollInterval = null;
-        let pollIndex = 0;
-
+        let pollIndex = 0; 
+        
         function updatePollingSystem() {
             if (globalQuatPollInterval) {
                 clearInterval(globalQuatPollInterval);
@@ -270,13 +275,12 @@
                 if (deviceArray.length === 0) return;
 
                 const ctx = deviceArray[pollIndex % deviceArray.length];
-                pollIndex++;
+                pollIndex++; 
 
                 if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
                     sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
                 }
             }, stepDelay);
-
             console.log(`Staggered Polling: ${count} devices, ${stepDelay}ms steps`);
         }
 
@@ -347,12 +351,13 @@
                     quatMode: false,
                     isWriting: false,
                     
-                    // --- FILTERS INITIALIZED HERE ---
-                    // Smoothing Roll, Pitch, and AccelY. 
-                    // Parameters: (freq=30Hz, minCutoff=1.0, beta=0.007, dcutoff=1.0)
+                    // --- NEW STATE FOR SMOOTHING ---
+                    // 1 Euro Filter Init (30Hz, 1.0, 0.007, 1.0 from Reference)
                     rollFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0), 
-                    pitchFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0),
-                    accelFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0)
+                    lastSmoothRoll: 0,
+                    lastRollTime: Date.now(),
+                    filteredRollVel: 0
+                    // --------------------------------
                 };
                 devices.set(device.id, ctx);
 
@@ -443,7 +448,7 @@
                 data: { labels: Array(50).fill(''), datasets: [
                     { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0 },
                     { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0 },
-                    { label: 'Accel Y', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0 } 
+                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0 }
                 ]},
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{display:false}, y:{grid:{color:'#334155'}} }, plugins:{legend:{labels:{color:'white'}}} }
             });
@@ -452,6 +457,39 @@
                 type: 'scatter',
                 data: { datasets: [{ label: 'XY Field', data: [], backgroundColor: '#fbbf24' }] },
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
+            });
+
+            const phaseChart = new Chart(liveCard.querySelector('.phase-chart').getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Roll Phase',
+                        data: [],
+                        borderColor: '#4ade80',
+                        borderWidth: 2,         
+                        showLine: true,         
+                        pointRadius: 0,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Roll Angle (°)', color: '#64748b', font: {size: 10} },
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: { 
+                            title: { display: true, text: 'Velocity (°/s)', color: '#64748b', font: {size: 10} },
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
             });
 
             const modal = liveCard.querySelector('.settings-modal');
@@ -582,7 +620,7 @@
             };
             liveCard.querySelectorAll('input[type="range"]').forEach(i => i.addEventListener('input', updateAlign));
 
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, card: liveCard };
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, card: liveCard };
         }
 
         function handleData(event, id) {
@@ -597,7 +635,6 @@
                 
                 const packetType = buffer[i + 1];
                 
-                // --- 0x71: QUATERNION & MAG DATA ---
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
                     if(i + 12 > buffer.length) continue;
                     
@@ -636,22 +673,53 @@
                     const pitchDeg = Math.asin(Math.max(-1, Math.min(1, vNose.y))) * (180/Math.PI);
                     const wy = Math.max(-1, Math.min(1, vWing.y));
                     let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
-                    
-                    // --- APPLY FILTERING ---
+                    let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
+                    if(compass < 0) compass += 360;
+
+                    // --- SMOOTHING PIPELINE ---
                     const nowSec = now / 1000;
-                    const smoothPitch = ctx.pitchFilter.filter(pitchDeg, nowSec);
+                    
+                    // 1. Filter Position First (using 1 Euro)
                     const smoothRoll = ctx.rollFilter.filter(rollDeg, nowSec);
 
-                    ctx.ui.card.querySelector('.val-ang-x').innerText = smoothPitch.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-y').innerText = smoothRoll.toFixed(1) + "°";
-                    // Accel Y not available in this packet, so we don't update it here.
+                    // 2. Calculate Velocity from Smoothed Position
+                    const dt = (now - ctx.lastRollTime) / 1000; // seconds
+                    if (dt > 0) {
+                        const rollDiff = smoothRoll - ctx.lastSmoothRoll;
+                        const currentVel = rollDiff / dt; // deg/s
+                        
+                        // 3. Filter Velocity (0.8/0.2 split from Reference)
+                        ctx.filteredRollVel = (ctx.filteredRollVel * 0.8) + (currentVel * 0.2);
+
+                        if (ctx.ui.phaseChart) {
+                            const pc = ctx.ui.phaseChart;
+                            // Plot smoothed position vs smoothed velocity
+                            pc.data.datasets[0].data.push({ x: smoothRoll, y: ctx.filteredRollVel });
+                            if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
+                            pc.update();
+                        }
+                    }
+                    ctx.lastSmoothRoll = smoothRoll;
+                    ctx.lastRollTime = now;
+                    // --------------------------
+
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
 
                     if (ctx.ui.mesh) ctx.ui.mesh.userData.targetQuat.copy(q);
+
+                    const c = ctx.ui.chart;
+                    c.data.datasets[0].data.push(pitchDeg);
+                    c.data.datasets[1].data.push(rollDeg);
+                    c.data.datasets[2].data.push(compass);
+                    if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                    c.update();
                     
                     if(isRecording) {
                         ctx.dataLog.push({ 
                             t: Date.now() - recordingStartTime, 
-                            pitch: smoothPitch, roll: smoothRoll, 
+                            pitch: pitchDeg, roll: rollDeg, yaw: compass,
                             q0, q1, q2, q3
                         });
                     }
@@ -660,8 +728,8 @@
                     continue;
                 }
                 
-                // --- 0x61: ACCEL / ANG VEL / ANGLE ---
                 if(packetType === 0x61) {
+                    if(ctx.quatMode) { i += 19; continue; }
                     if(i + 20 > buffer.length) continue;
                     
                     const getS = (offset) => {
@@ -669,26 +737,13 @@
                         return v >= 32768 ? v - 65536 : v;
                     };
                     
-                    // Raw Angles
                     const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
                     const pitch = angX, roll = -angY;
                     let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
 
-                    // Raw Acceleration Y (Range 16g)
-                    const accY = getS(4) / 32768.0 * 16.0;
-
-                    // --- APPLY FILTERING ---
-                    const now = Date.now();
-                    const nowSec = now / 1000;
-                    
-                    const smoothPitch = ctx.pitchFilter.filter(pitch, nowSec);
-                    const smoothRoll = ctx.rollFilter.filter(roll, nowSec);
-                    const smoothAccY = ctx.accelFilter.filter(accY, nowSec);
-
-                    // Update UI with Smoothed Values
-                    ctx.ui.card.querySelector('.val-ang-x').innerText = smoothPitch.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-y').innerText = smoothRoll.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-z').innerText = smoothAccY.toFixed(2) + "g";
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
 
                     if (ctx.ui.mesh) {
                         const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
@@ -696,13 +751,13 @@
                     }
                     
                     const c = ctx.ui.chart;
-                    c.data.datasets[0].data.push(smoothPitch); 
-                    c.data.datasets[1].data.push(smoothRoll); 
-                    c.data.datasets[2].data.push(smoothAccY); 
+                    c.data.datasets[0].data.push(pitch); 
+                    c.data.datasets[1].data.push(roll); 
+                    c.data.datasets[2].data.push(compass);
                     if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
                     c.update();
                     
-                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch: smoothPitch, roll: smoothRoll, accY: smoothAccY });
+                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: compass });
                     
                     i += 19;
                     continue;
@@ -828,8 +883,8 @@
                         r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
                     ).join('\n');
                 } else {
-                    csv += 'Time(ms),Pitch,Roll,AccelY(g)\n';
-                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + (r.accY !== undefined ? r.accY.toFixed(3) : '0.000')).join('\n');
+                    csv += 'Time(ms),Pitch,Roll,Yaw\n';
+                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3)).join('\n');
                 }
                 
                 const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
