@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WitMotion Sensor Dashboard</title>
+    <title>WitMotion Pro Dashboard (Smoothed)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
@@ -26,7 +26,7 @@
     <header class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
         <div>
             <h1 class="text-3xl font-bold text-white tracking-tight">WitMotion <span class="text-blue-500">Pro</span></h1>
-            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
+            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Smoothed Sensor Data</p>
         </div>
         <div class="flex gap-3 items-center">
             <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
@@ -211,6 +211,32 @@
         const READ_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb";
         const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
+        // --- 1 EURO FILTER (RESTORED FROM OLD CODE) ---
+        class LowPassFilter {
+            constructor(alpha){this.alpha=alpha;this.lastVal=null;}
+            filterWithAlpha(val, alpha){
+                if(this.lastVal===null){this.lastVal=val;return val;}
+                const res=alpha*val+(1.0-alpha)*this.lastVal; this.lastVal=res; return res;
+            }
+        }
+        
+        class OneEuroFilter {
+            constructor(freq, minCutoff=1.0, beta=0.0, dcutoff=1.0) {
+                this.freq=freq; this.minCutoff=minCutoff; this.beta=beta; this.dcutoff=dcutoff;
+                this.x=new LowPassFilter(this.alpha(minCutoff)); this.dx=new LowPassFilter(this.alpha(dcutoff)); this.lastTime=null;
+            }
+            alpha(cutoff) { const te=1.0/this.freq; const tau=1.0/(2*Math.PI*cutoff); return 1.0/(1.0+tau/te); }
+            filter(val, timestamp) {
+                if(this.lastTime && timestamp) this.freq=1.0/(timestamp-this.lastTime);
+                this.lastTime=timestamp;
+                const d=(this.x.lastVal!==null)?(val-this.x.lastVal)*this.freq:0.0;
+                const edx=this.dx.filterWithAlpha(d, this.alpha(this.dcutoff));
+                const cutoff=this.minCutoff+this.beta*Math.abs(edx);
+                return this.x.filterWithAlpha(val, this.alpha(cutoff));
+            }
+        }
+        // -----------------------------------------------------
+
         const devices = new Map();
         let isRecording = false;
         let recordingStartTime = 0;
@@ -220,7 +246,6 @@
         let globalQuatPollInterval = null;
         let pollIndex = 0;
 
-        // --- STAGGERED POLLING LOGIC ---
         function updatePollingSystem() {
             if (globalQuatPollInterval) {
                 clearInterval(globalQuatPollInterval);
@@ -268,8 +293,7 @@
             ctx.isWriting = true;
             try { 
                 await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
-            } catch(e) { 
-            }
+            } catch(e) { }
             ctx.isWriting = false;
         }
         
@@ -311,6 +335,7 @@
                 const writeChar = await service.getCharacteristic(WRITE_UUID);
 
                 const ui = createDeviceUI(device);
+                
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
@@ -320,7 +345,14 @@
                     quatReceiveCount: 0,
                     lastQuatTime: Date.now(),
                     quatMode: false,
-                    isWriting: false
+                    isWriting: false,
+                    
+                    // --- FILTERS INITIALIZED HERE ---
+                    // Smoothing Roll, Pitch, and AccelY. 
+                    // Parameters: (freq=30Hz, minCutoff=1.0, beta=0.007, dcutoff=1.0)
+                    rollFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0), 
+                    pitchFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0),
+                    accelFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0)
                 };
                 devices.set(device.id, ctx);
 
@@ -406,7 +438,6 @@
             }
             animate();
 
-            // UPDATED CHART: Labels and Colors
             const chart = new Chart(liveCard.querySelector('.device-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: Array(50).fill(''), datasets: [
@@ -566,6 +597,7 @@
                 
                 const packetType = buffer[i + 1];
                 
+                // --- 0x71: QUATERNION & MAG DATA ---
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
                     if(i + 12 > buffer.length) continue;
                     
@@ -605,19 +637,21 @@
                     const wy = Math.max(-1, Math.min(1, vWing.y));
                     let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
                     
-                    // NOTE: In Quaternion mode, we don't extract Accel Y easily without extra packets.
-                    // We keep updating Pitch/Roll here, but Accel Y might not update if only 0x71 is sent.
-                    
-                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
-                    // ctx.ui.card.querySelector('.val-ang-z').innerText = "---"; // Accel Y unknown in this packet
+                    // --- APPLY FILTERING ---
+                    const nowSec = now / 1000;
+                    const smoothPitch = ctx.pitchFilter.filter(pitchDeg, nowSec);
+                    const smoothRoll = ctx.rollFilter.filter(rollDeg, nowSec);
+
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = smoothPitch.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = smoothRoll.toFixed(1) + "°";
+                    // Accel Y not available in this packet, so we don't update it here.
 
                     if (ctx.ui.mesh) ctx.ui.mesh.userData.targetQuat.copy(q);
                     
                     if(isRecording) {
                         ctx.dataLog.push({ 
                             t: Date.now() - recordingStartTime, 
-                            pitch: pitchDeg, roll: rollDeg, 
+                            pitch: smoothPitch, roll: smoothRoll, 
                             q0, q1, q2, q3
                         });
                     }
@@ -626,7 +660,7 @@
                     continue;
                 }
                 
-                // MAIN DATA PACKET (Contains Pitch, Roll, and Acceleration)
+                // --- 0x61: ACCEL / ANG VEL / ANGLE ---
                 if(packetType === 0x61) {
                     if(i + 20 > buffer.length) continue;
                     
@@ -635,20 +669,26 @@
                         return v >= 32768 ? v - 65536 : v;
                     };
                     
-                    // Angles
+                    // Raw Angles
                     const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
                     const pitch = angX, roll = -angY;
                     let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
 
-                    // Acceleration Y extraction (Offset 4 for AyL, AyH)
-                    // Range is 16g.
+                    // Raw Acceleration Y (Range 16g)
                     const accY = getS(4) / 32768.0 * 16.0;
 
-                    // Update UI
-                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
-                    // Display Accel Y instead of Compass
-                    ctx.ui.card.querySelector('.val-ang-z').innerText = accY.toFixed(2) + "g";
+                    // --- APPLY FILTERING ---
+                    const now = Date.now();
+                    const nowSec = now / 1000;
+                    
+                    const smoothPitch = ctx.pitchFilter.filter(pitch, nowSec);
+                    const smoothRoll = ctx.rollFilter.filter(roll, nowSec);
+                    const smoothAccY = ctx.accelFilter.filter(accY, nowSec);
+
+                    // Update UI with Smoothed Values
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = smoothPitch.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = smoothRoll.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = smoothAccY.toFixed(2) + "g";
 
                     if (ctx.ui.mesh) {
                         const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
@@ -656,13 +696,13 @@
                     }
                     
                     const c = ctx.ui.chart;
-                    c.data.datasets[0].data.push(pitch); 
-                    c.data.datasets[1].data.push(roll); 
-                    c.data.datasets[2].data.push(accY); // Plot Accel Y
+                    c.data.datasets[0].data.push(smoothPitch); 
+                    c.data.datasets[1].data.push(smoothRoll); 
+                    c.data.datasets[2].data.push(smoothAccY); 
                     if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
                     c.update();
                     
-                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, accY });
+                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch: smoothPitch, roll: smoothRoll, accY: smoothAccY });
                     
                     i += 19;
                     continue;
@@ -782,7 +822,6 @@
                 csv += '# Data Points: ' + ctx.dataLog.length + '\n';
                 csv += '# Export Time: ' + new Date().toISOString() + '\n#\n';
                 
-                // Export Columns: Time, Pitch, Roll, AccelY
                 if (ctx.quatMode && ctx.dataLog[0] && ctx.dataLog[0].q0 !== undefined) {
                     csv += 'Time(ms),Pitch,Roll,Yaw,Q0,Q1,Q2,Q3\n';
                     csv += ctx.dataLog.map(r => 
