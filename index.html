@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inertial Measurement Unit Dashboard</title>
+    <title>WitMotion Pro Dashboard</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
@@ -25,13 +25,13 @@
 
     <header class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
         <div>
-            <h1 class="text-3xl font-bold text-white tracking-tight">Inertial Measurement Unit <span class="text-blue-500">Dashboard</span></h1>
-            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">by Terence Koh</p>
+            <h1 class="text-3xl font-bold text-white tracking-tight">WitMotion <span class="text-blue-500">Pro</span></h1>
+            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
         </div>
         <div class="flex gap-3 items-center">
             <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-                <span class="text-slate-400">Staggered Poll:</span> 
-                <span id="pollRateDisplay" class="text-green-400">--ms</span>
+                <span class="text-slate-400">Quat Poll:</span> 
+                <span id="pollRateDisplay" class="text-green-400">--Hz</span>
                 <span class="text-slate-600 mx-1">|</span>
                 <span id="deviceCountDisplay" class="text-blue-400">0 sensors</span>
             </div>
@@ -69,19 +69,28 @@
 
     <template id="deviceTemplate">
         <div class="device-card card rounded-xl overflow-hidden relative flex flex-col">
-            <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                <div>
-                    <h2 class="text-lg font-bold text-white device-name leading-tight">Sensor</h2>
-                    <span class="text-xs text-slate-500 font-mono device-id">ID: --</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <div class="battery-indicator flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">
-                        <span>🔋</span><span class="bat-val">--%</span>
+            <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-white device-name leading-tight">Sensor</h2>
+                        <span class="text-xs text-slate-500 font-mono device-id">ID: --</span>
                     </div>
-                    <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
-                    <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Compass Calibration">🧭</button>
-                    <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                    <div class="flex items-center gap-2">
+                        <div class="battery-indicator flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">
+                            <span>🔋</span><span class="bat-val">--%</span>
+                        </div>
+                        <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
+                        <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Compass Calibration">🧭</button>
+                        <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                    </div>
                 </div>
+                <select class="role-select bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded p-1.5 w-full outline-none focus:border-blue-500">
+                    <option value="">Select Role (None)</option>
+                    <option value="Board 1">Board 1</option>
+                    <option value="Strut 1">Strut 1</option>
+                    <option value="Board 2">Board 2</option>
+                    <option value="Strut 2">Strut 2</option>
+                </select>
             </div>
 
             <div class="canvas-container h-64 bg-slate-900 relative cursor-move">
@@ -91,27 +100,31 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-3 divide-x divide-slate-700 border-t border-b border-slate-700 bg-slate-800/30">
-                <div class="p-3 text-center">
-                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">PITCH (X)</div>
-                    <div class="text-xl font-mono font-bold text-red-400 val-ang-x">0.0°</div>
+            <div class="grid grid-cols-4 divide-x divide-slate-700 border-t border-b border-slate-700 bg-slate-800/30">
+                <div class="p-2 text-center">
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">PITCH</div>
+                    <div class="text-base font-mono font-bold text-red-400 val-ang-x">0.0°</div>
                 </div>
-                <div class="p-3 text-center">
-                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">ROLL (Y)</div>
-                    <div class="text-xl font-mono font-bold text-green-400 val-ang-y">0.0°</div>
+                <div class="p-2 text-center">
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">ROLL</div>
+                    <div class="text-base font-mono font-bold text-green-400 val-ang-y">0.0°</div>
                 </div>
-                <div class="p-3 text-center">
-                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">COMPASS (Z)</div>
-                    <div class="text-xl font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
+                <div class="p-2 text-center">
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">YAW</div>
+                    <div class="text-base font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
                 </div>
+                <div class="p-2 text-center bg-slate-800/50">
+                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">ACCEL Y</div>
+                    <div class="text-base font-mono font-bold text-yellow-400 val-acc-y">0.00</div>
+                </div>
+            </div>
+            
+            <div class="sheet-angle-box hidden bg-indigo-900/30 border-b border-slate-700 p-2 flex items-center justify-between">
+                <div class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Sheet Angle</div>
+                <div class="text-xl font-mono font-bold text-indigo-100 val-sheet-angle">--</div>
             </div>
 
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
-            
-            <div class="h-64 bg-slate-900/50 p-2 border-t border-slate-700 relative">
-                <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-bold tracking-wider z-10">PHASE SPACE (ROLL)</div>
-                <canvas class="phase-chart"></canvas>
-            </div>
             
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
                 <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
@@ -141,17 +154,6 @@
                                 <div class="text-xs text-slate-500 mt-1">Polling is active. Status shows if this sensor responds.</div>
                             </div>
                             
-                            <button class="enable-quat-btn w-full bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex items-center justify-between group mb-2">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-xl">🧬</span>
-                                    <div class="text-left">
-                                        <div class="text-sm font-bold text-slate-200">Enable Quaternion Mode</div>
-                                        <div class="text-[10px] text-slate-400">Fixes flipping at 90° roll.</div>
-                                    </div>
-                                </div>
-                                <span class="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">Click Once</span>
-                            </button>
-
                             <div class="bg-orange-900/30 border border-orange-700 rounded p-3">
                                 <div class="text-sm font-bold text-orange-300 mb-2">⚡ Set Output Rate</div>
                                 <div class="text-xs text-orange-200/70 mb-3">If your sensor shows low Hz (1-10Hz), click below to set it to 100Hz. This setting is saved to the sensor.</div>
@@ -160,7 +162,7 @@
                                 </button>
                             </div>
                             
-                            <button class="set-9axis-btn w-full bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex items-center justify-between group mt-2">
+                            <button class="set-9axis-btn w-full bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex items-center justify-between group">
                                 <div class="flex items-center gap-3">
                                     <span class="text-xl">🧭</span>
                                     <div class="text-left">
@@ -170,7 +172,7 @@
                                 </div>
                             </button>
                             
-                            <button class="factory-reset-btn w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700 p-3 rounded flex items-center justify-between group mt-2">
+                            <button class="factory-reset-btn w-full bg-red-900/50 hover:bg-red-800/50 border border-red-700 p-3 rounded flex items-center justify-between group">
                                 <div class="flex items-center gap-3">
                                     <span class="text-xl">🔄</span>
                                     <div class="text-left">
@@ -216,32 +218,6 @@
         const READ_UUID = "0000ffe4-0000-1000-8000-00805f9a34fb";
         const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
-        // --- 1 EURO FILTER IMPLEMENTATION (From Reference) ---
-        class LowPassFilter {
-            constructor(alpha){this.alpha=alpha;this.lastVal=null;}
-            filterWithAlpha(val, alpha){
-                if(this.lastVal===null){this.lastVal=val;return val;}
-                const res=alpha*val+(1.0-alpha)*this.lastVal; this.lastVal=res; return res;
-            }
-        }
-        
-        class OneEuroFilter {
-            constructor(freq, minCutoff=1.0, beta=0.0, dcutoff=1.0) {
-                this.freq=freq; this.minCutoff=minCutoff; this.beta=beta; this.dcutoff=dcutoff;
-                this.x=new LowPassFilter(this.alpha(minCutoff)); this.dx=new LowPassFilter(this.alpha(dcutoff)); this.lastTime=null;
-            }
-            alpha(cutoff) { const te=1.0/this.freq; const tau=1.0/(2*Math.PI*cutoff); return 1.0/(1.0+tau/te); }
-            filter(val, timestamp) {
-                if(this.lastTime && timestamp) this.freq=1.0/(timestamp-this.lastTime);
-                this.lastTime=timestamp;
-                const d=(this.x.lastVal!==null)?(val-this.x.lastVal)*this.freq:0.0;
-                const edx=this.dx.filterWithAlpha(d, this.alpha(this.dcutoff));
-                const cutoff=this.minCutoff+this.beta*Math.abs(edx);
-                return this.x.filterWithAlpha(val, this.alpha(cutoff));
-            }
-        }
-        // -----------------------------------------------------
-
         const devices = new Map();
         let isRecording = false;
         let recordingStartTime = 0;
@@ -249,39 +225,53 @@
         let durationInterval = null;
 
         let globalQuatPollInterval = null;
-        let pollIndex = 0; 
+        let pollIndex = 0;
         
+        const POLL_RATES = {
+            1: 20,
+            2: 25,
+            3: 30,
+            4: 35
+        };
+
+        function getAdaptivePollRate() {
+            const count = devices.size;
+            if (count === 0) return null;
+            return POLL_RATES[Math.min(count, 4)] || POLL_RATES[4];
+        }
+
         function updatePollingSystem() {
             if (globalQuatPollInterval) {
                 clearInterval(globalQuatPollInterval);
                 globalQuatPollInterval = null;
             }
 
-            const count = devices.size;
-            if (count === 0) {
+            const deviceCount = devices.size;
+            if (deviceCount === 0) {
                 document.getElementById('pollingStatus').classList.add('hidden');
                 return;
             }
 
-            const targetCycle = 40; 
-            const stepDelay = Math.max(10, Math.floor(targetCycle / count)); 
+            const pollRate = getAdaptivePollRate();
+            const effectiveHz = Math.round(1000 / pollRate);
             
             document.getElementById('pollingStatus').classList.remove('hidden');
-            document.getElementById('pollRateDisplay').innerText = `Step: ${stepDelay}ms`;
-            document.getElementById('deviceCountDisplay').innerText = count + ' sensor' + (count > 1 ? 's' : '');
+            document.getElementById('pollRateDisplay').innerText = effectiveHz + 'Hz';
+            document.getElementById('deviceCountDisplay').innerText = deviceCount + ' sensor' + (deviceCount > 1 ? 's' : '');
 
             globalQuatPollInterval = setInterval(() => {
                 const deviceArray = Array.from(devices.values());
                 if (deviceArray.length === 0) return;
-
+                
                 const ctx = deviceArray[pollIndex % deviceArray.length];
-                pollIndex++; 
-
+                pollIndex++;
+                
                 if (ctx && ctx.device.gatt.connected && !ctx.isWriting) {
                     sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
                 }
-            }, stepDelay);
-            console.log(`Staggered Polling: ${count} devices, ${stepDelay}ms steps`);
+            }, pollRate);
+
+            console.log('Quaternion polling: ' + effectiveHz + 'Hz, ' + deviceCount + ' device(s)');
         }
 
         function loadSettings(id) {
@@ -297,7 +287,9 @@
             ctx.isWriting = true;
             try { 
                 await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
-            } catch(e) { }
+            } catch(e) { 
+                if (!e.message.includes('GATT')) console.error(e); 
+            }
             ctx.isWriting = false;
         }
         
@@ -339,7 +331,6 @@
                 const writeChar = await service.getCharacteristic(WRITE_UUID);
 
                 const ui = createDeviceUI(device);
-                
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
@@ -350,14 +341,9 @@
                     lastQuatTime: Date.now(),
                     quatMode: false,
                     isWriting: false,
-                    
-                    // --- NEW STATE FOR SMOOTHING ---
-                    // 1 Euro Filter Init (30Hz, 1.0, 0.007, 1.0 from Reference)
-                    rollFilter: new OneEuroFilter(30, 1.0, 0.007, 1.0), 
-                    lastSmoothRoll: 0,
-                    lastRollTime: Date.now(),
-                    filteredRollVel: 0
-                    // --------------------------------
+                    assignedRole: '', // "Board 1", "Strut 1", etc.
+                    lastCompass: 0,
+                    lastAccY: 0
                 };
                 devices.set(device.id, ctx);
 
@@ -396,6 +382,22 @@
             container.appendChild(clone);
             
             const liveCard = container.querySelector('.device-card[data-id="' + device.id + '"]');
+            
+            // Handle Role Selection
+            liveCard.querySelector('.role-select').addEventListener('change', (e) => {
+                const ctx = devices.get(device.id);
+                if(ctx) {
+                    ctx.assignedRole = e.target.value;
+                    // Toggle visibility of Sheet Angle box if role is a Board
+                    if(ctx.assignedRole.includes("Board")) {
+                        liveCard.querySelector('.sheet-angle-box').classList.remove('hidden');
+                    } else {
+                        liveCard.querySelector('.sheet-angle-box').classList.add('hidden');
+                    }
+                    updateSheetAngles();
+                }
+            });
+
             const canvasContainer = liveCard.querySelector('.canvas-container');
             const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f172a);
             const camera = new THREE.PerspectiveCamera(50, canvasContainer.offsetWidth / canvasContainer.offsetHeight, 0.1, 1000);
@@ -446,50 +448,39 @@
             const chart = new Chart(liveCard.querySelector('.device-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: Array(50).fill(''), datasets: [
-                    { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0 },
-                    { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0 },
-                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0 }
+                    { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
+                    { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
+                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
+                    { label: 'Acc Y', data: [], borderColor: '#fbbf24', borderWidth: 2, pointRadius: 0, borderDash: [5, 5], yAxisID: 'y1' }
                 ]},
-                options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{display:false}, y:{grid:{color:'#334155'}} }, plugins:{legend:{labels:{color:'white'}}} }
+                options: { 
+                    animation: false, 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        x:{display:false}, 
+                        y:{
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid:{color:'#334155'}
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false }, // only want the grid lines for one axis
+                            min: -2, max: 2
+                        }
+                    }, 
+                    plugins:{legend:{labels:{color:'white'}}} 
+                }
             });
 
             const magChart = new Chart(liveCard.querySelector('.mag-scatter-chart').getContext('2d'), {
                 type: 'scatter',
                 data: { datasets: [{ label: 'XY Field', data: [], backgroundColor: '#fbbf24' }] },
                 options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
-            });
-
-            const phaseChart = new Chart(liveCard.querySelector('.phase-chart').getContext('2d'), {
-                type: 'scatter',
-                data: {
-                    datasets: [{
-                        label: 'Roll Phase',
-                        data: [],
-                        borderColor: '#4ade80',
-                        borderWidth: 2,         
-                        showLine: true,         
-                        pointRadius: 0,
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    animation: false,
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { 
-                            title: { display: true, text: 'Roll Angle (°)', color: '#64748b', font: {size: 10} },
-                            grid: { color: '#334155' },
-                            ticks: { color: '#94a3b8' }
-                        },
-                        y: { 
-                            title: { display: true, text: 'Velocity (°/s)', color: '#64748b', font: {size: 10} },
-                            grid: { color: '#334155' },
-                            ticks: { color: '#94a3b8' }
-                        }
-                    },
-                    plugins: { legend: { display: false } }
-                }
             });
 
             const modal = liveCard.querySelector('.settings-modal');
@@ -526,14 +517,7 @@
                 }
             });
 
-            liveCard.querySelector('.enable-quat-btn').addEventListener('click', async () => {
-                if(!confirm("Enable Quaternion Mode?")) return;
-                const ctx = devices.get(device.id);
-                await unlock(ctx);
-                await sendRaw(ctx, [0xFF, 0xAA, 0x02, 0x15, 0x00]); 
-                setTimeout(async () => { await save(ctx); alert("Quaternion Mode Enabled. Check 'Mode: Quaternion' on card."); }, 500);
-            });
-
+            // SET 100Hz OUTPUT RATE BUTTON
             liveCard.querySelector('.set-100hz-btn').addEventListener('click', async () => {
                 const ctx = devices.get(device.id);
                 const btn = liveCard.querySelector('.set-100hz-btn');
@@ -542,16 +526,21 @@
                 btn.disabled = true;
                 
                 try {
+                    // Unlock
                     await unlock(ctx);
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x09, 0x00]); // 100Hz
+                    
+                    // Set return rate to 100Hz (0x09)
+                    await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x09, 0x00]);
                     await new Promise(r => setTimeout(r, 200));
+                    
+                    // Save configuration
                     await save(ctx);
                     
                     btn.innerText = '✓ Set to 100Hz!';
                     btn.classList.remove('bg-orange-600', 'hover:bg-orange-500');
                     btn.classList.add('bg-green-600');
                     
-                    alert('Output rate set to 100Hz and saved!');
+                    alert('Output rate set to 100Hz and saved!\n\nThe sensor should now respond faster. Check the Hz indicator on the card.');
                 } catch(e) {
                     console.error(e);
                     btn.innerText = 'Error - Try Again';
@@ -567,7 +556,7 @@
             });
 
             liveCard.querySelector('.factory-reset-btn').addEventListener('click', async () => {
-                if(!confirm("WARNING: This will restore factory defaults. Continue?")) return;
+                if(!confirm("WARNING: This will restore factory defaults (including 10Hz rate). Continue?")) return;
                 const ctx = devices.get(device.id);
                 await unlock(ctx);
                 await sendRaw(ctx, [0xFF, 0xAA, 0x00, 0x01, 0x00]);
@@ -620,7 +609,46 @@
             };
             liveCard.querySelectorAll('input[type="range"]').forEach(i => i.addEventListener('input', updateAlign));
 
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, phaseChart, card: liveCard };
+            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, card: liveCard };
+        }
+
+        function updateSheetAngles() {
+            // Find pairs and calculate angle
+            const boards = [];
+            const struts = [];
+            
+            devices.forEach(ctx => {
+                if(ctx.assignedRole === "Board 1") boards[1] = ctx;
+                if(ctx.assignedRole === "Board 2") boards[2] = ctx;
+                if(ctx.assignedRole === "Strut 1") struts[1] = ctx;
+                if(ctx.assignedRole === "Strut 2") struts[2] = ctx;
+            });
+
+            [1, 2].forEach(i => {
+                if(boards[i]) {
+                    const boardCtx = boards[i];
+                    const display = boardCtx.ui.card.querySelector('.val-sheet-angle');
+                    
+                    if(struts[i]) {
+                        const boardComp = boardCtx.lastCompass || 0;
+                        const strutComp = struts[i].lastCompass || 0;
+                        
+                        // Calculation: (Board - Strut) normalized, then * -1
+                        let diff = boardComp - strutComp;
+                        
+                        // Normalize to -180...180
+                        if (diff > 180) diff -= 360;
+                        if (diff < -180) diff += 360;
+                        
+                        // Invert
+                        const sheetAngle = diff * -1;
+                        
+                        display.innerText = sheetAngle.toFixed(0) + "°";
+                    } else {
+                        display.innerText = "-- (No Strut)";
+                    }
+                }
+            });
         }
 
         function handleData(event, id) {
@@ -635,13 +663,67 @@
                 
                 const packetType = buffer[i + 1];
                 
+                // Helper to get signed short
+                const getS = (offset) => {
+                    let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                    return v >= 32768 ? v - 65536 : v;
+                };
+
+                // Packet 0x61: Acc/Gyro/Angle (Often sent with 0x51 in BLE, or alone)
+                // We use this to get AccY even if we are in Quat mode
+                if(packetType === 0x61) {
+                    if(i + 20 > buffer.length) continue;
+                    
+                    // Acc Y is at offset 4 (bytes 2 and 3 of payload)
+                    // Formula: Raw / 32768 * 16g
+                    const accY = getS(4) / 32768.0 * 16.0;
+                    
+                    ctx.lastAccY = accY;
+                    ctx.ui.card.querySelector('.val-acc-y').innerText = accY.toFixed(2) + "g";
+                    
+                    // If NOT in Quat mode, we also read angles from here
+                    if(!ctx.quatMode) {
+                        const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
+                        const pitch = angX, roll = -angY;
+                        let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
+                        
+                        ctx.lastCompass = compass;
+                        updateSheetAngles(); // Update shared logic
+
+                        ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
+                        ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
+                        ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
+
+                        if (ctx.ui.mesh) {
+                            const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
+                            ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
+                        }
+                        
+                        const c = ctx.ui.chart;
+                        c.data.datasets[0].data.push(pitch); 
+                        c.data.datasets[1].data.push(roll); 
+                        c.data.datasets[2].data.push(compass);
+                        c.data.datasets[3].data.push(accY);
+                        if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                        c.update();
+                        
+                        if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: compass, accY });
+                    } else {
+                         // In Quat mode, we still want to log/chart Acc Y if available here
+                         // We update the chart/log in the 0x51 block usually, but 0x51 is a different packet.
+                         // If 0x61 arrives interleaved with 0x51, we just store lastAccY and use it when 0x51 processed
+                         // OR update chart here? Better to update in the main angle update loop to keep sync.
+                         // But 0x51 might come way later. 
+                         // For simplicity, if we are in Quat Mode, we just store lastAccY here.
+                    }
+                    
+                    i += 19;
+                    continue;
+                }
+                
+                // Packet 0x51: Quaternion (Subtype 0x51 of 0x71)
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
                     if(i + 12 > buffer.length) continue;
-                    
-                    const getS = (offset) => {
-                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
-                        return v >= 32768 ? v - 65536 : v;
-                    };
                     
                     const q0 = getS(4) / 32768.0;
                     const q1 = getS(6) / 32768.0;
@@ -676,32 +758,8 @@
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
                     if(compass < 0) compass += 360;
 
-                    // --- SMOOTHING PIPELINE ---
-                    const nowSec = now / 1000;
-                    
-                    // 1. Filter Position First (using 1 Euro)
-                    const smoothRoll = ctx.rollFilter.filter(rollDeg, nowSec);
-
-                    // 2. Calculate Velocity from Smoothed Position
-                    const dt = (now - ctx.lastRollTime) / 1000; // seconds
-                    if (dt > 0) {
-                        const rollDiff = smoothRoll - ctx.lastSmoothRoll;
-                        const currentVel = rollDiff / dt; // deg/s
-                        
-                        // 3. Filter Velocity (0.8/0.2 split from Reference)
-                        ctx.filteredRollVel = (ctx.filteredRollVel * 0.8) + (currentVel * 0.2);
-
-                        if (ctx.ui.phaseChart) {
-                            const pc = ctx.ui.phaseChart;
-                            // Plot smoothed position vs smoothed velocity
-                            pc.data.datasets[0].data.push({ x: smoothRoll, y: ctx.filteredRollVel });
-                            if (pc.data.datasets[0].data.length > 100) pc.data.datasets[0].data.shift();
-                            pc.update();
-                        }
-                    }
-                    ctx.lastSmoothRoll = smoothRoll;
-                    ctx.lastRollTime = now;
-                    // --------------------------
+                    ctx.lastCompass = compass;
+                    updateSheetAngles(); // Update shared logic
 
                     ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
@@ -713,6 +771,9 @@
                     c.data.datasets[0].data.push(pitchDeg);
                     c.data.datasets[1].data.push(rollDeg);
                     c.data.datasets[2].data.push(compass);
+                    // Push the last known AccY (from 0x61 packet usually)
+                    c.data.datasets[3].data.push(ctx.lastAccY || 0);
+                    
                     if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
                     c.update();
                     
@@ -720,44 +781,10 @@
                         ctx.dataLog.push({ 
                             t: Date.now() - recordingStartTime, 
                             pitch: pitchDeg, roll: rollDeg, yaw: compass,
+                            accY: ctx.lastAccY || 0,
                             q0, q1, q2, q3
                         });
                     }
-                    
-                    i += 19;
-                    continue;
-                }
-                
-                if(packetType === 0x61) {
-                    if(ctx.quatMode) { i += 19; continue; }
-                    if(i + 20 > buffer.length) continue;
-                    
-                    const getS = (offset) => {
-                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
-                        return v >= 32768 ? v - 65536 : v;
-                    };
-                    
-                    const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
-                    const pitch = angX, roll = -angY;
-                    let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
-
-                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
-
-                    if (ctx.ui.mesh) {
-                        const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
-                        ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
-                    }
-                    
-                    const c = ctx.ui.chart;
-                    c.data.datasets[0].data.push(pitch); 
-                    c.data.datasets[1].data.push(roll); 
-                    c.data.datasets[2].data.push(compass);
-                    if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
-                    c.update();
-                    
-                    if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: compass });
                     
                     i += 19;
                     continue;
@@ -777,10 +804,6 @@
                 
                 if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
                     if(i + 8 > buffer.length) continue;
-                    const getS = (offset) => {
-                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
-                        return v >= 32768 ? v - 65536 : v;
-                    };
                     const mc = ctx.ui.magChart;
                     mc.data.datasets[0].data.push({ x: getS(4), y: getS(6) });
                     if(mc.data.datasets[0].data.length > 300) mc.data.datasets[0].data.shift();
@@ -868,29 +891,31 @@
             
             devices.forEach((ctx, id) => {
                 const deviceName = ctx.device.name || 'Unknown';
+                const role = ctx.assignedRole || 'None';
                 const mode = ctx.quatMode ? 'Quaternion' : 'Euler';
                 
                 let csv = '# WitMotion Pro - Session Export\n';
                 csv += '# Session Sync: ' + (syncTimestamp || 'Not synchronized') + '\n';
                 csv += '# Device: ' + deviceName + ' (ID: ' + id + ')\n';
+                csv += '# Assigned Role: ' + role + '\n';
                 csv += '# Mode: ' + mode + '\n';
                 csv += '# Data Points: ' + ctx.dataLog.length + '\n';
                 csv += '# Export Time: ' + new Date().toISOString() + '\n#\n';
                 
                 if (ctx.quatMode && ctx.dataLog[0] && ctx.dataLog[0].q0 !== undefined) {
-                    csv += 'Time(ms),Pitch,Roll,Yaw,Q0,Q1,Q2,Q3\n';
+                    csv += 'Time(ms),Pitch,Roll,Yaw,AccY,Q0,Q1,Q2,Q3\n';
                     csv += ctx.dataLog.map(r => 
-                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
+                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + (r.accY || 0).toFixed(3) + ',' + r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
                     ).join('\n');
                 } else {
-                    csv += 'Time(ms),Pitch,Roll,Yaw\n';
-                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3)).join('\n');
+                    csv += 'Time(ms),Pitch,Roll,Yaw,AccY\n';
+                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + (r.accY || 0).toFixed(3)).join('\n');
                 }
                 
                 const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
                 const a = document.createElement('a'); 
                 a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); 
-                a.download = deviceName + '_' + timestamp + '.csv'; 
+                a.download = deviceName + '_' + role.replace(' ','') + '_' + timestamp + '.csv'; 
                 a.click();
             });
             
