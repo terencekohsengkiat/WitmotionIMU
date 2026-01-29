@@ -19,6 +19,16 @@
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         .pulse-recording { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .health-bar { transition: width 0.5s ease-out; }
+        .calibration-progress { transition: width 0.3s ease-out; }
+        @keyframes rotate-hint {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(90deg); }
+            50% { transform: rotate(180deg); }
+            75% { transform: rotate(270deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .rotate-animation { animation: rotate-hint 3s linear infinite; }
     </style>
 </head>
 <body class="min-h-screen p-6 flex flex-col">
@@ -26,7 +36,7 @@
     <header class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
         <div>
             <h1 class="text-3xl font-bold text-white tracking-tight">WitMotion <span class="text-blue-500">Pro</span></h1>
-            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Commercial Sensor Management</p>
+            <p class="text-slate-400 text-xs uppercase tracking-wider mt-1">Wingfoil Sensor Management</p>
         </div>
         <div class="flex gap-3 items-center">
             <div id="pollingStatus" class="hidden text-xs font-mono bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
@@ -67,32 +77,49 @@
 
     <div id="deviceContainer" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-min"></div>
 
+    <!-- Device Card Template -->
     <template id="deviceTemplate">
         <div class="device-card card rounded-xl overflow-hidden relative flex flex-col">
-            <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col gap-3">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h2 class="text-lg font-bold text-white device-name leading-tight">Sensor</h2>
-                        <span class="text-xs text-slate-500 font-mono device-id">ID: --</span>
-                    </div>
+            <!-- Header -->
+            <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                <div>
                     <div class="flex items-center gap-2">
-                        <div class="battery-indicator flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">
-                            <span>🔋</span><span class="bat-val">--%</span>
-                        </div>
-                        <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
-                        <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Compass Calibration">🧭</button>
-                        <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                        <h2 class="text-lg font-bold text-white device-name leading-tight">Sensor</h2>
+                        <select class="role-select bg-slate-700 border border-slate-600 text-white text-xs rounded px-2 py-1 cursor-pointer">
+                            <option value="board-1">Board 1</option>
+                            <option value="board-2">Board 2</option>
+                            <option value="board-3">Board 3</option>
+                            <option value="board-4">Board 4</option>
+                            <option value="wing-1">Wing 1</option>
+                            <option value="wing-2">Wing 2</option>
+                            <option value="wing-3">Wing 3</option>
+                            <option value="wing-4">Wing 4</option>
+                        </select>
                     </div>
+                    <span class="text-xs text-slate-500 font-mono device-id">ID: --</span>
                 </div>
-                <select class="role-select bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded p-1.5 w-full outline-none focus:border-blue-500">
-                    <option value="">Select Role (None)</option>
-                    <option value="Board 1">Board 1</option>
-                    <option value="Strut 1">Strut 1</option>
-                    <option value="Board 2">Board 2</option>
-                    <option value="Strut 2">Strut 2</option>
-                </select>
+                <div class="flex items-center gap-2">
+                    <div class="battery-indicator flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">
+                        <span>🔋</span><span class="bat-val">--%</span>
+                    </div>
+                    <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
+                    <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Calibration">🔧</button>
+                    <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                </div>
             </div>
 
+            <!-- Health Bar -->
+            <div class="px-4 py-2 bg-slate-800/30 border-b border-slate-700">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] text-slate-500 font-bold tracking-wider">SENSOR HEALTH</span>
+                    <span class="text-xs font-mono text-slate-400 health-value">--</span>
+                </div>
+                <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="health-bar h-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- 3D Canvas -->
             <div class="canvas-container h-64 bg-slate-900 relative cursor-move">
                 <div class="absolute top-2 left-2 text-[10px] text-slate-500 font-mono font-bold bg-slate-900/80 px-2 py-1 rounded mode-indicator border border-slate-700">Mode: Auto (Default)</div>
                 <div class="absolute top-2 right-2 text-[10px] font-mono bg-slate-900/80 px-2 py-1 rounded border border-slate-700 quat-rate-indicator hidden">
@@ -100,32 +127,52 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-4 divide-x divide-slate-700 border-t border-b border-slate-700 bg-slate-800/30">
-                <div class="p-2 text-center">
-                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">PITCH</div>
-                    <div class="text-base font-mono font-bold text-red-400 val-ang-x">0.0°</div>
+            <!-- Data Display -->
+            <div class="grid grid-cols-3 divide-x divide-slate-700 border-t border-b border-slate-700 bg-slate-800/30">
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">PITCH</div>
+                    <div class="text-xl font-mono font-bold text-red-400 val-ang-x">0.0°</div>
                 </div>
-                <div class="p-2 text-center">
-                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">ROLL</div>
-                    <div class="text-base font-mono font-bold text-green-400 val-ang-y">0.0°</div>
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">ROLL</div>
+                    <div class="text-xl font-mono font-bold text-green-400 val-ang-y">0.0°</div>
                 </div>
-                <div class="p-2 text-center">
-                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">YAW</div>
-                    <div class="text-base font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
+                <div class="p-3 text-center">
+                    <div class="text-[10px] text-slate-500 font-bold tracking-wider">COMPASS</div>
+                    <div class="text-xl font-mono font-bold text-blue-400 val-ang-z">0.0°</div>
                 </div>
-                <div class="p-2 text-center bg-slate-800/50">
-                    <div class="text-[9px] text-slate-500 font-bold tracking-wider">ACCEL Y</div>
-                    <div class="text-base font-mono font-bold text-yellow-400 val-acc-y">0.00</div>
-                </div>
-            </div>
-            
-            <div class="sheet-angle-box hidden bg-indigo-900/30 border-b border-slate-700 p-2 flex items-center justify-between">
-                <div class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Sheet Angle</div>
-                <div class="text-xl font-mono font-bold text-indigo-100 val-sheet-angle">--</div>
             </div>
 
+            <!-- Sheet Angle Display (shown for both Board and Wing) -->
+            <div class="sheet-angle-container hidden px-4 py-3 bg-gradient-to-r from-purple-900/30 to-pink-900/30 border-b border-slate-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-[10px] text-purple-400 font-bold tracking-wider">SHEET ANGLE</div>
+                        <div class="text-2xl font-mono font-bold text-purple-300 sheet-angle-value">--</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-pink-400 font-bold tracking-wider">TACK</div>
+                        <div class="text-lg font-bold tack-label text-slate-400">--</div>
+                    </div>
+                </div>
+                <!-- Wing pairing selector (only for wings) -->
+                <div class="wing-pairing-container hidden mt-2 pt-2 border-t border-slate-700">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-slate-500">Reference:</span>
+                        <select class="pairing-select bg-slate-700 border border-slate-600 text-white text-xs rounded px-2 py-1">
+                            <option value="1">Board 1</option>
+                            <option value="2">Board 2</option>
+                            <option value="3">Board 3</option>
+                            <option value="4">Board 4</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart -->
             <div class="h-40 bg-slate-900/50 p-2"><canvas class="device-chart"></canvas></div>
             
+            <!-- Settings Modal -->
             <div class="settings-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
                 <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
                     <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-xl">
@@ -134,6 +181,7 @@
                     </div>
                     <div class="p-6 overflow-y-auto space-y-8">
                         
+                        <!-- Firmware Section -->
                         <div class="space-y-3">
                             <h4 class="text-xs font-bold text-blue-400 uppercase tracking-widest border-b border-slate-700 pb-1">1. Firmware</h4>
                             <div class="flex gap-2">
@@ -143,20 +191,19 @@
                             </div>
                         </div>
 
+                        <!-- Device Settings Section -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-purple-400 uppercase tracking-widest border-b border-slate-700 pb-1">2. Output Mode</h4>
+                            <h4 class="text-xs font-bold text-purple-400 uppercase tracking-widest border-b border-slate-700 pb-1">2. Device Settings</h4>
                             
-                            <div class="quat-status-box bg-slate-900/50 border border-slate-600 rounded p-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm text-slate-300">Quaternion Response:</span>
-                                    <span class="quat-status-indicator text-xs font-mono px-2 py-1 rounded bg-red-900/50 text-red-400">NOT RESPONDING</span>
-                                </div>
-                                <div class="text-xs text-slate-500 mt-1">Polling is active. Status shows if this sensor responds.</div>
+                            <div class="bg-purple-900/30 border border-purple-700 rounded p-3">
+                                <div class="text-sm font-bold text-purple-300 mb-2">📡 Quaternion Status</div>
+                                <div class="text-xs text-purple-200/70 quat-status-indicator bg-red-900/50 text-red-400 px-2 py-1 rounded inline-block">NOT RESPONDING</div>
+                                <div class="text-[10px] text-purple-300/50 mt-2">Status shows if this sensor responds.</div>
                             </div>
                             
                             <div class="bg-orange-900/30 border border-orange-700 rounded p-3">
                                 <div class="text-sm font-bold text-orange-300 mb-2">⚡ Set Output Rate</div>
-                                <div class="text-xs text-orange-200/70 mb-3">If your sensor shows low Hz (1-10Hz), click below to set it to 100Hz. This setting is saved to the sensor.</div>
+                                <div class="text-xs text-orange-200/70 mb-3">If your sensor shows low Hz (1-10Hz), click below to set it to 100Hz.</div>
                                 <button class="set-100hz-btn w-full bg-orange-600 hover:bg-orange-500 text-white p-2 rounded font-bold text-sm">
                                     Set 100Hz Output Rate
                                 </button>
@@ -183,22 +230,66 @@
                             </button>
                         </div>
 
+                        <!-- Sensor Orientation Section -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Calibration</h4>
-                            <div class="grid grid-cols-2 gap-4">
-                                <button class="calib-accel-btn bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex flex-col items-center gap-2">
-                                    <span class="text-2xl">📏</span><span class="text-sm font-bold text-slate-200">Level Horizon</span>
-                                </button>
-                                <button class="calib-mag-btn bg-slate-700 hover:bg-slate-600 border border-slate-600 p-3 rounded flex flex-col items-center gap-2">
-                                    <span class="text-2xl">🔄</span><span class="text-sm font-bold text-slate-200">Mag Calib</span>
-                                </button>
+                            <h4 class="text-xs font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Sensor Mounting Orientation</h4>
+                            
+                            <!-- Board Orientation (shown when role is board) -->
+                            <div class="board-orientation-settings space-y-3">
+                                <div class="bg-cyan-900/30 border border-cyan-700 rounded p-3">
+                                    <div class="text-sm font-bold text-cyan-300 mb-3">🏄 Board Sensor Orientation</div>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="text-xs text-cyan-200/70 block mb-1">Y-axis points to:</label>
+                                            <select class="board-y-axis w-full bg-slate-700 border border-slate-600 text-white text-sm rounded px-3 py-2">
+                                                <option value="bow" selected>Bow</option>
+                                                <option value="stern">Stern</option>
+                                                <option value="sky">Sky</option>
+                                                <option value="ground">Ground</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs text-cyan-200/70 block mb-1">Z-axis points to:</label>
+                                            <select class="board-z-axis w-full bg-slate-700 border border-slate-600 text-white text-sm rounded px-3 py-2">
+                                                <option value="bow">Bow</option>
+                                                <option value="stern">Stern</option>
+                                                <option value="sky" selected>Sky</option>
+                                                <option value="ground">Ground</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mag-viz-container hidden bg-black rounded border border-slate-700 p-2">
-                                <div class="text-center text-xs text-slate-400 mb-1">Live Magnetic Field (X vs Y)</div>
-                                <div class="h-48 w-full"><canvas class="mag-scatter-chart"></canvas></div>
+
+                            <!-- Wing Orientation (shown when role is wing) -->
+                            <div class="wing-orientation-settings hidden space-y-3">
+                                <div class="bg-cyan-900/30 border border-cyan-700 rounded p-3">
+                                    <div class="text-sm font-bold text-cyan-300 mb-3">🪁 Wing Sensor Orientation</div>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="text-xs text-cyan-200/70 block mb-1">Y-axis points to:</label>
+                                            <select class="wing-y-axis w-full bg-slate-700 border border-slate-600 text-white text-sm rounded px-3 py-2">
+                                                <option value="leading-edge" selected>Leading Edge</option>
+                                                <option value="trailing-edge">Trailing Edge</option>
+                                                <option value="sky">Sky</option>
+                                                <option value="ground">Ground</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="text-xs text-cyan-200/70 block mb-1">Z-axis points to:</label>
+                                            <select class="wing-z-axis w-full bg-slate-700 border border-slate-600 text-white text-sm rounded px-3 py-2">
+                                                <option value="leading-edge">Leading Edge</option>
+                                                <option value="trailing-edge">Trailing Edge</option>
+                                                <option value="sky">Sky</option>
+                                                <option value="ground" selected>Ground</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
+                        <!-- Visualization Offset -->
                         <div class="space-y-3">
                             <h4 class="text-xs font-bold text-green-400 uppercase tracking-widest border-b border-slate-700 pb-1">4. Visualization Offset</h4>
                             <div class="space-y-4">
@@ -206,6 +297,91 @@
                                 <div><div class="flex justify-between text-xs mb-1"><span>Roll Offset (Y)</span><span class="val-rot-y text-blue-400">0°</span></div><input type="range" class="slider-rot-y w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
                                 <div><div class="flex justify-between text-xs mb-1"><span>Yaw Offset (Z)</span><span class="val-rot-z text-blue-400">0°</span></div><input type="range" class="slider-rot-z w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calibration Wizard Modal -->
+            <div class="calibration-modal fixed inset-0 modal-backdrop z-50 hidden flex-col justify-center items-center p-4">
+                <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md shadow-2xl">
+                    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50 rounded-t-xl">
+                        <h3 class="font-bold text-lg text-white">🔧 Calibration Wizard</h3>
+                        <button class="close-calibration text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+                    </div>
+                    <div class="p-6">
+                        <!-- Step 1: Accelerometer -->
+                        <div class="calib-step-1">
+                            <div class="text-center mb-6">
+                                <div class="text-6xl mb-4">📏</div>
+                                <h4 class="text-xl font-bold text-white mb-2">Step 1 of 2: Level Calibration</h4>
+                                <p class="text-slate-400 text-sm">Place the sensor <strong class="text-yellow-400">FLAT</strong> on a stable surface.<br>Do not move it during calibration.</p>
+                            </div>
+                            
+                            <div class="bg-slate-900 rounded-lg p-4 mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-500">Calibrating...</span>
+                                    <span class="text-xs text-slate-400 accel-countdown">5s</span>
+                                </div>
+                                <div class="h-3 bg-slate-700 rounded-full overflow-hidden">
+                                    <div class="accel-progress calibration-progress h-full bg-yellow-500 rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <button class="start-accel-calib-btn w-full bg-yellow-600 hover:bg-yellow-500 text-white p-3 rounded-lg font-bold">
+                                Start Level Calibration
+                            </button>
+                        </div>
+
+                        <!-- Step 2: Magnetometer -->
+                        <div class="calib-step-2 hidden">
+                            <div class="text-center mb-6">
+                                <div class="text-6xl mb-4 rotate-animation">🔄</div>
+                                <h4 class="text-xl font-bold text-white mb-2">Step 2 of 2: Compass Calibration</h4>
+                                <p class="text-slate-400 text-sm">Rotate the sensor slowly:<br>
+                                    <strong class="text-cyan-400">2× around X-axis</strong> (roll)<br>
+                                    <strong class="text-green-400">2× around Y-axis</strong> (pitch)<br>
+                                    <strong class="text-purple-400">2× around Z-axis</strong> (yaw)
+                                </p>
+                            </div>
+                            
+                            <div class="bg-slate-900 rounded-lg p-4 mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-500">Coverage</span>
+                                    <span class="text-xs text-slate-400 mag-coverage">0%</span>
+                                </div>
+                                <div class="h-3 bg-slate-700 rounded-full overflow-hidden">
+                                    <div class="mag-progress calibration-progress h-full bg-cyan-500 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <div class="mt-3 h-32"><canvas class="mag-calib-chart"></canvas></div>
+                            </div>
+
+                            <button class="start-mag-calib-btn w-full bg-cyan-600 hover:bg-cyan-500 text-white p-3 rounded-lg font-bold">
+                                Start Compass Calibration
+                            </button>
+                            <button class="finish-mag-calib-btn hidden w-full bg-green-600 hover:bg-green-500 text-white p-3 rounded-lg font-bold">
+                                ✓ Finish Calibration
+                            </button>
+                        </div>
+
+                        <!-- Completion -->
+                        <div class="calib-complete hidden">
+                            <div class="text-center mb-6">
+                                <div class="text-6xl mb-4">✅</div>
+                                <h4 class="text-xl font-bold text-white mb-2">Calibration Complete!</h4>
+                                <p class="text-slate-400 text-sm">Your sensor is now calibrated.</p>
+                            </div>
+                            
+                            <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-4">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-green-400 font-bold">Sensor Health</span>
+                                    <span class="text-2xl font-mono font-bold text-green-300 calib-final-health">--</span>
+                                </div>
+                            </div>
+
+                            <button class="close-calibration-done w-full bg-slate-600 hover:bg-slate-500 text-white p-3 rounded-lg font-bold">
+                                Done
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -219,6 +395,9 @@
         const WRITE_UUID = "0000ffe9-0000-1000-8000-00805f9a34fb";
 
         const devices = new Map();
+        const roleAssignments = new Map(); // role -> deviceId
+        let connectionOrder = 0;
+        
         let isRecording = false;
         let recordingStartTime = 0;
         let syncTimestamp = null;
@@ -227,12 +406,440 @@
         let globalQuatPollInterval = null;
         let pollIndex = 0;
         
-        const POLL_RATES = {
-            1: 20,
-            2: 25,
-            3: 30,
-            4: 35
-        };
+        const POLL_RATES = { 1: 20, 2: 25, 3: 30, 4: 35 };
+
+        // ==================== ROLE MANAGEMENT ====================
+        
+        function getNextAvailableRole() {
+            for (let i = 1; i <= 4; i++) {
+                const role = 'board-' + i;
+                if (!roleAssignments.has(role)) return role;
+            }
+            for (let i = 1; i <= 4; i++) {
+                const role = 'wing-' + i;
+                if (!roleAssignments.has(role)) return role;
+            }
+            return 'board-1';
+        }
+
+        function assignRole(deviceId, newRole) {
+            const ctx = devices.get(deviceId);
+            if (!ctx) return;
+            
+            const oldRole = ctx.role;
+            
+            // Check if new role is already taken
+            if (roleAssignments.has(newRole) && roleAssignments.get(newRole) !== deviceId) {
+                const otherDeviceId = roleAssignments.get(newRole);
+                const otherCtx = devices.get(otherDeviceId);
+                
+                // Swap roles
+                if (otherCtx && oldRole) {
+                    roleAssignments.set(oldRole, otherDeviceId);
+                    otherCtx.role = oldRole;
+                    otherCtx.ui.card.querySelector('.role-select').value = oldRole;
+                    updateDeviceUI(otherCtx);
+                    saveSettings(otherDeviceId, { role: oldRole });
+                }
+            }
+            
+            // Remove old assignment
+            if (oldRole && roleAssignments.get(oldRole) === deviceId) {
+                roleAssignments.delete(oldRole);
+            }
+            
+            // Set new assignment
+            roleAssignments.set(newRole, deviceId);
+            ctx.role = newRole;
+            updateDeviceUI(ctx);
+            saveSettings(deviceId, { role: newRole });
+            
+            // Update all sheet angles
+            updateAllSheetAngles();
+        }
+
+        function isWingRole(role) {
+            return role && role.startsWith('wing-');
+        }
+
+        function isBoardRole(role) {
+            return role && role.startsWith('board-');
+        }
+
+        function getRoleNumber(role) {
+            if (!role) return null;
+            return parseInt(role.split('-')[1]);
+        }
+
+        function getPairedBoard(wingCtx) {
+            const pairingNum = wingCtx.pairing || getRoleNumber(wingCtx.role);
+            const boardRole = 'board-' + pairingNum;
+            const boardDeviceId = roleAssignments.get(boardRole);
+            return boardDeviceId ? devices.get(boardDeviceId) : null;
+        }
+
+        // ==================== SHEET ANGLE CALCULATION ====================
+
+        function calculateSheetAngle(boardHeading, wingHeading) {
+            let diff = wingHeading - boardHeading;
+            // Normalize to [-180, 180]
+            while (diff > 180) diff -= 360;
+            while (diff < -180) diff += 360;
+            return diff;
+        }
+
+        function getTackLabel(sheetAngle) {
+            if (sheetAngle === null || isNaN(sheetAngle)) return '--';
+            if (sheetAngle > 0) return 'STARBOARD';
+            if (sheetAngle < 0) return 'PORT';
+            return 'NEUTRAL';
+        }
+
+        function getTackColor(sheetAngle) {
+            if (sheetAngle === null || isNaN(sheetAngle)) return 'text-slate-400';
+            if (sheetAngle > 0) return 'text-green-400';
+            if (sheetAngle < 0) return 'text-red-400';
+            return 'text-slate-400';
+        }
+
+        function updateAllSheetAngles() {
+            devices.forEach((ctx, id) => {
+                updateSheetAngleDisplay(ctx);
+            });
+        }
+
+        function updateSheetAngleDisplay(ctx) {
+            const container = ctx.ui.card.querySelector('.sheet-angle-container');
+            const valueEl = ctx.ui.card.querySelector('.sheet-angle-value');
+            const tackEl = ctx.ui.card.querySelector('.tack-label');
+            const pairingContainer = ctx.ui.card.querySelector('.wing-pairing-container');
+            
+            if (isWingRole(ctx.role)) {
+                // Wing: show sheet angle based on paired board
+                container.classList.remove('hidden');
+                pairingContainer.classList.remove('hidden');
+                
+                const boardCtx = getPairedBoard(ctx);
+                if (boardCtx && boardCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
+                    const sheetAngle = calculateSheetAngle(boardCtx.lastHeading, ctx.lastHeading);
+                    valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                    tackEl.innerText = getTackLabel(sheetAngle);
+                    tackEl.className = 'text-lg font-bold tack-label ' + getTackColor(sheetAngle);
+                } else {
+                    valueEl.innerText = '--';
+                    tackEl.innerText = '--';
+                    tackEl.className = 'text-lg font-bold tack-label text-slate-400';
+                }
+            } else if (isBoardRole(ctx.role)) {
+                // Board: show sheet angle if paired wing exists
+                const boardNum = getRoleNumber(ctx.role);
+                let pairedWingCtx = null;
+                
+                devices.forEach((otherCtx) => {
+                    if (isWingRole(otherCtx.role)) {
+                        const wingPairing = otherCtx.pairing || getRoleNumber(otherCtx.role);
+                        if (wingPairing === boardNum) {
+                            pairedWingCtx = otherCtx;
+                        }
+                    }
+                });
+                
+                if (pairedWingCtx && pairedWingCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
+                    container.classList.remove('hidden');
+                    pairingContainer.classList.add('hidden');
+                    const sheetAngle = calculateSheetAngle(ctx.lastHeading, pairedWingCtx.lastHeading);
+                    valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                    tackEl.innerText = getTackLabel(sheetAngle);
+                    tackEl.className = 'text-lg font-bold tack-label ' + getTackColor(sheetAngle);
+                } else {
+                    container.classList.add('hidden');
+                }
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        // ==================== ORIENTATION TRANSFORMATION ====================
+
+        function getOrientationTransform(ctx) {
+            const role = ctx.role;
+            const settings = loadSettings(ctx.device.id);
+            
+            let yAxis, zAxis;
+            if (isWingRole(role)) {
+                yAxis = settings.wingYAxis || 'leading-edge';
+                zAxis = settings.wingZAxis || 'ground';
+            } else {
+                yAxis = settings.boardYAxis || 'bow';
+                zAxis = settings.boardZAxis || 'sky';
+            }
+            
+            // Return transformation parameters
+            return { yAxis, zAxis, isWing: isWingRole(role) };
+        }
+
+        function applyOrientationToHeading(rawHeading, transform) {
+            let heading = rawHeading;
+            
+            if (transform.isWing) {
+                // Wing transformations
+                if (transform.yAxis === 'trailing-edge') heading = (heading + 180) % 360;
+                if (transform.zAxis === 'sky') heading = (360 - heading) % 360; // Flip for upside down
+            } else {
+                // Board transformations
+                if (transform.yAxis === 'stern') heading = (heading + 180) % 360;
+                if (transform.yAxis === 'sky' || transform.yAxis === 'ground') {
+                    // Non-standard mount, adjust based on Z
+                    if (transform.zAxis === 'stern') heading = (heading + 180) % 360;
+                }
+                if (transform.zAxis === 'ground') heading = (360 - heading) % 360;
+            }
+            
+            return heading;
+        }
+
+        // ==================== HEALTH CALCULATION ====================
+
+        function calculateSensorHealth(ctx) {
+            // Health is based on:
+            // 1. Magnetometer field magnitude consistency (should be stable ~200-350)
+            // 2. Accelerometer total magnitude when still (should be ~1g)
+            
+            let health = 50; // Base health
+            
+            if (ctx.magHistory && ctx.magHistory.length > 10) {
+                const magnitudes = ctx.magHistory.map(m => Math.sqrt(m.x*m.x + m.y*m.y + m.z*m.z));
+                const avg = magnitudes.reduce((a,b) => a+b, 0) / magnitudes.length;
+                const variance = magnitudes.reduce((sum, m) => sum + Math.pow(m - avg, 2), 0) / magnitudes.length;
+                const stdDev = Math.sqrt(variance);
+                
+                // Lower variance = better health
+                const magHealth = Math.max(0, 50 - stdDev / 2);
+                health = magHealth;
+                
+                // Bonus if magnitude is in expected range
+                if (avg > 200 && avg < 400) health += 25;
+                else if (avg > 100 && avg < 500) health += 10;
+            }
+            
+            // Cap at 100
+            health = Math.min(100, Math.max(0, health));
+            return Math.round(health);
+        }
+
+        function updateHealthDisplay(ctx) {
+            const health = calculateSensorHealth(ctx);
+            const healthBar = ctx.ui.card.querySelector('.health-bar');
+            const healthValue = ctx.ui.card.querySelector('.health-value');
+            
+            healthBar.style.width = health + '%';
+            healthValue.innerText = health + '%';
+            
+            ctx.lastHealth = health;
+        }
+
+        // ==================== UI UPDATES ====================
+
+        function updateDeviceUI(ctx) {
+            const card = ctx.ui.card;
+            const role = ctx.role;
+            
+            // Update orientation settings visibility
+            const boardOrientSettings = card.querySelector('.board-orientation-settings');
+            const wingOrientSettings = card.querySelector('.wing-orientation-settings');
+            
+            if (isWingRole(role)) {
+                boardOrientSettings.classList.add('hidden');
+                wingOrientSettings.classList.remove('hidden');
+            } else {
+                boardOrientSettings.classList.remove('hidden');
+                wingOrientSettings.classList.add('hidden');
+            }
+            
+            // Update sheet angle display
+            updateSheetAngleDisplay(ctx);
+            
+            // Load appropriate 3D model
+            loadModelForRole(ctx);
+        }
+
+        function loadModelForRole(ctx) {
+            const role = ctx.role;
+            const modelFile = isWingRole(role) ? 'assets/wing.obj' : 'assets/board.obj';
+            
+            // Clear existing model
+            while (ctx.ui.alignmentGroup.children.length > 0) {
+                ctx.ui.alignmentGroup.remove(ctx.ui.alignmentGroup.children[0]);
+            }
+            
+            new THREE.OBJLoader().load(modelFile, obj => {
+                const box = new THREE.Box3().setFromObject(obj);
+                const s = 3 / Math.max(box.max.x-box.min.x, box.max.y-box.min.y, box.max.z-box.min.z);
+                obj.scale.set(s, s, s);
+                obj.position.sub(box.getCenter(new THREE.Vector3()));
+                const color = isWingRole(role) ? 0x9333ea : 0x3b82f6; // Purple for wing, blue for board
+                obj.traverse(c => { if(c.isMesh) c.material = new THREE.MeshPhongMaterial({ color }); });
+                ctx.ui.alignmentGroup.add(obj);
+            }, undefined, () => {
+                // Fallback geometry
+                const color = isWingRole(role) ? 0x9333ea : 0x3b82f6;
+                const geom = isWingRole(role) 
+                    ? new THREE.BoxGeometry(2.5, 0.1, 1) // Flat wing shape
+                    : new THREE.BoxGeometry(1.5, 0.5, 2);  // Board shape
+                ctx.ui.alignmentGroup.add(new THREE.Mesh(geom, new THREE.MeshPhongMaterial({color})));
+            });
+        }
+
+        // ==================== CALIBRATION WIZARD ====================
+
+        async function startCalibrationWizard(ctx) {
+            const card = ctx.ui.card;
+            const modal = card.querySelector('.calibration-modal');
+            const step1 = modal.querySelector('.calib-step-1');
+            const step2 = modal.querySelector('.calib-step-2');
+            const complete = modal.querySelector('.calib-complete');
+            
+            // Reset state
+            step1.classList.remove('hidden');
+            step2.classList.add('hidden');
+            complete.classList.add('hidden');
+            modal.querySelector('.accel-progress').style.width = '0%';
+            modal.querySelector('.mag-progress').style.width = '0%';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // Initialize mag chart
+            if (!ctx.magCalibChart) {
+                ctx.magCalibChart = new Chart(modal.querySelector('.mag-calib-chart').getContext('2d'), {
+                    type: 'scatter',
+                    data: { datasets: [{ label: 'XY Field', data: [], backgroundColor: '#22d3ee', pointRadius: 2 }] },
+                    options: { 
+                        animation: false, 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        scales: { 
+                            x: { type: 'linear', grid: { color: '#334155' }, min: -500, max: 500 }, 
+                            y: { grid: { color: '#334155' }, min: -500, max: 500 } 
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+            ctx.magCalibChart.data.datasets[0].data = [];
+            ctx.magCalibChart.update();
+        }
+
+        async function runAccelCalibration(ctx) {
+            const card = ctx.ui.card;
+            const modal = card.querySelector('.calibration-modal');
+            const progressBar = modal.querySelector('.accel-progress');
+            const countdown = modal.querySelector('.accel-countdown');
+            const startBtn = modal.querySelector('.start-accel-calib-btn');
+            
+            startBtn.disabled = true;
+            startBtn.innerText = 'Calibrating...';
+            
+            // Send calibration command
+            await unlock(ctx);
+            await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x01, 0x00]);
+            
+            // Animate progress over 5 seconds
+            let elapsed = 0;
+            const duration = 5000;
+            const interval = setInterval(() => {
+                elapsed += 100;
+                const pct = Math.min(100, (elapsed / duration) * 100);
+                progressBar.style.width = pct + '%';
+                countdown.innerText = Math.max(0, Math.ceil((duration - elapsed) / 1000)) + 's';
+                
+                if (elapsed >= duration) {
+                    clearInterval(interval);
+                    save(ctx);
+                    
+                    // Move to step 2
+                    setTimeout(() => {
+                        modal.querySelector('.calib-step-1').classList.add('hidden');
+                        modal.querySelector('.calib-step-2').classList.remove('hidden');
+                    }, 500);
+                }
+            }, 100);
+        }
+
+        async function startMagCalibration(ctx) {
+            const card = ctx.ui.card;
+            const modal = card.querySelector('.calibration-modal');
+            const startBtn = modal.querySelector('.start-mag-calib-btn');
+            const finishBtn = modal.querySelector('.finish-mag-calib-btn');
+            
+            startBtn.classList.add('hidden');
+            finishBtn.classList.remove('hidden');
+            
+            // Start mag calibration mode
+            await unlock(ctx);
+            await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x07, 0x00]);
+            
+            ctx.isMagCalibrating = true;
+            ctx.magCalibData = [];
+            
+            // Poll magnetometer data
+            ctx.magCalibPollInterval = setInterval(() => {
+                sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x3A, 0x00]);
+            }, 100);
+        }
+
+        async function finishMagCalibration(ctx) {
+            const card = ctx.ui.card;
+            const modal = card.querySelector('.calibration-modal');
+            
+            // Stop polling
+            if (ctx.magCalibPollInterval) {
+                clearInterval(ctx.magCalibPollInterval);
+                ctx.magCalibPollInterval = null;
+            }
+            
+            // Send finish command
+            await unlock(ctx);
+            await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x00, 0x00]);
+            
+            setTimeout(async () => {
+                await save(ctx);
+                ctx.isMagCalibrating = false;
+                
+                // Show completion
+                modal.querySelector('.calib-step-2').classList.add('hidden');
+                modal.querySelector('.calib-complete').classList.remove('hidden');
+                
+                // Update health
+                updateHealthDisplay(ctx);
+                modal.querySelector('.calib-final-health').innerText = (ctx.lastHealth || '--') + '%';
+            }, 500);
+        }
+
+        function updateMagCalibProgress(ctx, magX, magY, magZ) {
+            if (!ctx.isMagCalibrating) return;
+            
+            ctx.magCalibData.push({ x: magX, y: magY, z: magZ });
+            
+            // Update chart
+            if (ctx.magCalibChart) {
+                ctx.magCalibChart.data.datasets[0].data.push({ x: magX, y: magY });
+                if (ctx.magCalibChart.data.datasets[0].data.length > 500) {
+                    ctx.magCalibChart.data.datasets[0].data.shift();
+                }
+                ctx.magCalibChart.update();
+            }
+            
+            // Calculate coverage (simplified sphere coverage estimation)
+            const coverage = Math.min(100, Math.round(ctx.magCalibData.length / 3));
+            
+            const modal = ctx.ui.card.querySelector('.calibration-modal');
+            modal.querySelector('.mag-progress').style.width = coverage + '%';
+            modal.querySelector('.mag-coverage').innerText = coverage + '%';
+        }
+
+        // ==================== POLLING & DATA HANDLING ====================
 
         function getAdaptivePollRate() {
             const count = devices.size;
@@ -270,20 +877,28 @@
                     sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x51, 0x00]);
                 }
             }, pollRate);
-
-            console.log('Quaternion polling: ' + effectiveHz + 'Hz, ' + deviceCount + ' device(s)');
         }
 
         function loadSettings(id) {
             const s = localStorage.getItem('sensor_' + id);
-            return s ? JSON.parse(s) : { rot: { x: 0, y: 0, z: 0 } };
+            return s ? JSON.parse(s) : { 
+                rot: { x: 0, y: 0, z: 0 },
+                role: null,
+                boardYAxis: 'bow',
+                boardZAxis: 'sky',
+                wingYAxis: 'leading-edge',
+                wingZAxis: 'ground',
+                pairing: null
+            };
         }
-        function saveSettings(id, s) {
-            localStorage.setItem('sensor_' + id, JSON.stringify({ ...loadSettings(id), ...s }));
+        
+        function saveSettings(id, updates) {
+            const current = loadSettings(id);
+            localStorage.setItem('sensor_' + id, JSON.stringify({ ...current, ...updates }));
         }
 
         async function sendRaw(ctx, bytes) {
-            if(!ctx.device.gatt.connected || ctx.isWriting) return;
+            if (!ctx.device.gatt.connected || ctx.isWriting) return;
             ctx.isWriting = true;
             try { 
                 await ctx.writeChar.writeValue(new Uint8Array(bytes)); 
@@ -297,6 +912,7 @@
             await sendRaw(ctx, [0xFF, 0xAA, 0x69, 0x88, 0xB5]); 
             await new Promise(r => setTimeout(r, 200)); 
         }
+        
         async function save(ctx) { 
             await sendRaw(ctx, [0xFF, 0xAA, 0x00, 0x00, 0x00]); 
             await new Promise(r => setTimeout(r, 200)); 
@@ -305,17 +921,28 @@
         function removeDevice(id) {
             const ctx = devices.get(id);
             if (!ctx) return;
+            
+            // Clean up role assignment
+            if (ctx.role && roleAssignments.get(ctx.role) === id) {
+                roleAssignments.delete(ctx.role);
+            }
+            
             if (ctx.device.gatt.connected) ctx.device.gatt.disconnect();
             clearInterval(ctx.battInterval);
             clearInterval(ctx.magPollInterval);
+            clearInterval(ctx.magCalibPollInterval);
             if (ctx.ui && ctx.ui.card) ctx.ui.card.remove();
             devices.delete(id);
             updatePollingSystem();
+            updateAllSheetAngles();
+            
             if (devices.size === 0) {
                 document.getElementById('recordBtn').classList.add('hidden');
                 document.getElementById('exportBtn').classList.add('hidden');
             }
         }
+
+        // ==================== DEVICE CONNECTION ====================
 
         document.getElementById('addDeviceBtn').addEventListener('click', async () => {
             try {
@@ -331,21 +958,31 @@
                 const writeChar = await service.getCharacteristic(WRITE_UUID);
 
                 const ui = createDeviceUI(device);
+                const settings = loadSettings(device.id);
+                const initialRole = settings.role || getNextAvailableRole();
+                
                 const ctx = { 
                     device, server, writeChar, ui, 
                     dataLog: [], 
                     isMagCalibrating: false, 
-                    magPollInterval: null, 
+                    magPollInterval: null,
+                    magCalibPollInterval: null,
                     battInterval: null,
                     quatReceiveCount: 0,
                     lastQuatTime: Date.now(),
                     quatMode: false,
                     isWriting: false,
-                    assignedRole: '', // "Board 1", "Strut 1", etc.
-                    lastCompass: 0,
-                    lastAccY: 0
+                    role: initialRole,
+                    pairing: settings.pairing || getRoleNumber(initialRole),
+                    lastHeading: undefined,
+                    magHistory: [],
+                    lastHealth: 50
                 };
                 devices.set(device.id, ctx);
+                
+                // Set up role
+                assignRole(device.id, initialRole);
+                ui.card.querySelector('.role-select').value = initialRole;
 
                 device.addEventListener('gattserverdisconnected', () => {
                     ui.card.classList.add('opacity-50', 'grayscale');
@@ -358,7 +995,7 @@
                 readChar.addEventListener('characteristicvaluechanged', (e) => handleData(e, device.id));
 
                 ctx.battInterval = setInterval(() => {
-                    if(device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
+                    if (device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
                 }, 30000);
                 setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]), 2000);
 
@@ -366,8 +1003,14 @@
 
                 document.getElementById('recordBtn').classList.remove('hidden');
                 document.getElementById('exportBtn').classList.remove('hidden');
+                
+                // Initial health display
+                setTimeout(() => updateHealthDisplay(ctx), 3000);
+                
             } catch (e) { console.error(e); }
         });
+
+        // ==================== DEVICE UI CREATION ====================
 
         function createDeviceUI(device) {
             const template = document.getElementById('deviceTemplate');
@@ -382,24 +1025,11 @@
             container.appendChild(clone);
             
             const liveCard = container.querySelector('.device-card[data-id="' + device.id + '"]');
-            
-            // Handle Role Selection
-            liveCard.querySelector('.role-select').addEventListener('change', (e) => {
-                const ctx = devices.get(device.id);
-                if(ctx) {
-                    ctx.assignedRole = e.target.value;
-                    // Toggle visibility of Sheet Angle box if role is a Board
-                    if(ctx.assignedRole.includes("Board")) {
-                        liveCard.querySelector('.sheet-angle-box').classList.remove('hidden');
-                    } else {
-                        liveCard.querySelector('.sheet-angle-box').classList.add('hidden');
-                    }
-                    updateSheetAngles();
-                }
-            });
-
             const canvasContainer = liveCard.querySelector('.canvas-container');
-            const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f172a);
+            
+            // Three.js setup
+            const scene = new THREE.Scene(); 
+            scene.background = new THREE.Color(0x0f172a);
             const camera = new THREE.PerspectiveCamera(50, canvasContainer.offsetWidth / canvasContainer.offsetHeight, 0.1, 1000);
             const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(canvasContainer.offsetWidth, 256);
@@ -407,12 +1037,14 @@
 
             new ResizeObserver(() => {
                 const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
-                if(w && h) { renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+                if (w && h) { renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
             }).observe(canvasContainer);
 
             scene.add(new THREE.AxesHelper(3));
             scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-            const dl = new THREE.DirectionalLight(0xffffff, 1); dl.position.set(5, 10, 7); scene.add(dl);
+            const dl = new THREE.DirectionalLight(0xffffff, 1); 
+            dl.position.set(5, 10, 7); 
+            scene.add(dl);
 
             const dataGroup = new THREE.Group();
             dataGroup.userData = { currentQuat: new THREE.Quaternion(), targetQuat: new THREE.Quaternion() };
@@ -422,22 +1054,12 @@
             alignmentGroup.rotation.set(settings.rot.x * Math.PI/180, settings.rot.y * Math.PI/180, settings.rot.z * Math.PI/180);
             dataGroup.add(alignmentGroup);
 
-            camera.position.set(3, 2, 5); camera.lookAt(0,0,0);
-
-            new THREE.OBJLoader().load('assets/sensor.obj', obj => {
-                const box = new THREE.Box3().setFromObject(obj);
-                const s = 3 / Math.max(box.max.x-box.min.x, box.max.y-box.min.y, box.max.z-box.min.z);
-                obj.scale.set(s, s, s);
-                obj.position.sub(box.getCenter(new THREE.Vector3()));
-                obj.traverse(c => { if(c.isMesh) c.material = new THREE.MeshPhongMaterial({ color: 0x3b82f6 }); });
-                alignmentGroup.add(obj);
-            }, undefined, () => {
-                alignmentGroup.add(new THREE.Mesh(new THREE.BoxGeometry(1.5,0.5,2), new THREE.MeshPhongMaterial({color:0xff4444})));
-            });
+            camera.position.set(3, 2, 5); 
+            camera.lookAt(0, 0, 0);
 
             function animate() {
                 requestAnimationFrame(animate);
-                if(dataGroup.userData.targetQuat) {
+                if (dataGroup.userData.targetQuat) {
                     dataGroup.userData.currentQuat.slerp(dataGroup.userData.targetQuat, 0.2); 
                     dataGroup.quaternion.copy(dataGroup.userData.currentQuat);
                 }
@@ -445,51 +1067,44 @@
             }
             animate();
 
+            // Chart setup
             const chart = new Chart(liveCard.querySelector('.device-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: Array(50).fill(''), datasets: [
-                    { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
-                    { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
-                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0, yAxisID: 'y' },
-                    { label: 'Acc Y', data: [], borderColor: '#fbbf24', borderWidth: 2, pointRadius: 0, borderDash: [5, 5], yAxisID: 'y1' }
+                    { label: 'Pitch', data: [], borderColor: '#f87171', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Roll', data: [], borderColor: '#4ade80', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Yaw', data: [], borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0 }
                 ]},
                 options: { 
                     animation: false, 
                     responsive: true, 
                     maintainAspectRatio: false, 
-                    scales: { 
-                        x:{display:false}, 
-                        y:{
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            grid:{color:'#334155'}
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            grid: { drawOnChartArea: false }, // only want the grid lines for one axis
-                            min: -2, max: 2
-                        }
-                    }, 
-                    plugins:{legend:{labels:{color:'white'}}} 
+                    scales: { x: { display: false }, y: { grid: { color: '#334155' } } }, 
+                    plugins: { legend: { labels: { color: 'white' } } } 
                 }
             });
 
-            const magChart = new Chart(liveCard.querySelector('.mag-scatter-chart').getContext('2d'), {
-                type: 'scatter',
-                data: { datasets: [{ label: 'XY Field', data: [], backgroundColor: '#fbbf24' }] },
-                options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { x:{type:'linear', grid:{color:'#334155'}}, y:{grid:{color:'#334155'}} } }
-            });
-
+            // Event listeners
             const modal = liveCard.querySelector('.settings-modal');
+            const calibModal = liveCard.querySelector('.calibration-modal');
+            
+            // Settings modal
             liveCard.querySelector('.settings-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                
+                // Load current values
                 liveCard.querySelector('.slider-rot-x').value = settings.rot.x;
                 liveCard.querySelector('.slider-rot-y').value = settings.rot.y;
                 liveCard.querySelector('.slider-rot-z').value = settings.rot.z;
                 
-                const ctx = devices.get(device.id);
+                // Orientation settings
+                const savedSettings = loadSettings(device.id);
+                liveCard.querySelector('.board-y-axis').value = savedSettings.boardYAxis || 'bow';
+                liveCard.querySelector('.board-z-axis').value = savedSettings.boardZAxis || 'sky';
+                liveCard.querySelector('.wing-y-axis').value = savedSettings.wingYAxis || 'leading-edge';
+                liveCard.querySelector('.wing-z-axis').value = savedSettings.wingZAxis || 'ground';
+                
+                // Quat status
                 const statusEl = liveCard.querySelector('.quat-status-indicator');
                 if (ctx && ctx.quatMode) {
                     statusEl.innerText = 'RESPONDING ✓';
@@ -501,14 +1116,83 @@
                     statusEl.classList.add('bg-red-900/50', 'text-red-400');
                 }
                 
-                modal.classList.remove('hidden'); modal.classList.add('flex');
+                modal.classList.remove('hidden'); 
+                modal.classList.add('flex');
             });
-            liveCard.querySelector('.close-settings').addEventListener('click', () => modal.classList.add('hidden') || modal.classList.remove('flex'));
-            liveCard.querySelector('.calib-btn').addEventListener('click', () => liveCard.querySelector('.settings-btn').click());
+            
+            liveCard.querySelector('.close-settings').addEventListener('click', () => {
+                modal.classList.add('hidden'); 
+                modal.classList.remove('flex');
+            });
 
+            // Calibration modal
+            liveCard.querySelector('.calib-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                startCalibrationWizard(ctx);
+            });
+            
+            liveCard.querySelector('.close-calibration').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                if (ctx.magCalibPollInterval) {
+                    clearInterval(ctx.magCalibPollInterval);
+                    ctx.magCalibPollInterval = null;
+                }
+                ctx.isMagCalibrating = false;
+                calibModal.classList.add('hidden');
+                calibModal.classList.remove('flex');
+            });
+            
+            liveCard.querySelector('.close-calibration-done').addEventListener('click', () => {
+                calibModal.classList.add('hidden');
+                calibModal.classList.remove('flex');
+            });
+            
+            liveCard.querySelector('.start-accel-calib-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                runAccelCalibration(ctx);
+            });
+            
+            liveCard.querySelector('.start-mag-calib-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                startMagCalibration(ctx);
+            });
+            
+            liveCard.querySelector('.finish-mag-calib-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                finishMagCalibration(ctx);
+            });
+
+            // Role selection
+            liveCard.querySelector('.role-select').addEventListener('change', (e) => {
+                assignRole(device.id, e.target.value);
+            });
+
+            // Wing pairing selection
+            liveCard.querySelector('.pairing-select').addEventListener('change', (e) => {
+                const ctx = devices.get(device.id);
+                ctx.pairing = parseInt(e.target.value);
+                saveSettings(device.id, { pairing: ctx.pairing });
+                updateAllSheetAngles();
+            });
+
+            // Orientation settings
+            liveCard.querySelector('.board-y-axis').addEventListener('change', (e) => {
+                saveSettings(device.id, { boardYAxis: e.target.value });
+            });
+            liveCard.querySelector('.board-z-axis').addEventListener('change', (e) => {
+                saveSettings(device.id, { boardZAxis: e.target.value });
+            });
+            liveCard.querySelector('.wing-y-axis').addEventListener('change', (e) => {
+                saveSettings(device.id, { wingYAxis: e.target.value });
+            });
+            liveCard.querySelector('.wing-z-axis').addEventListener('change', (e) => {
+                saveSettings(device.id, { wingZAxis: e.target.value });
+            });
+
+            // Device settings buttons
             liveCard.querySelector('.burn-name-btn').addEventListener('click', async () => {
                 const n = liveCard.querySelector('.rename-input').value;
-                if(n && confirm('Rename to "WT' + n + '"?')) {
+                if (n && confirm('Rename to "WT' + n + '"?')) {
                     const ctx = devices.get(device.id);
                     await unlock(ctx);
                     await sendRaw(ctx, new TextEncoder().encode("WT" + "WT" + n + "\r\n"));
@@ -517,30 +1201,20 @@
                 }
             });
 
-            // SET 100Hz OUTPUT RATE BUTTON
             liveCard.querySelector('.set-100hz-btn').addEventListener('click', async () => {
                 const ctx = devices.get(device.id);
                 const btn = liveCard.querySelector('.set-100hz-btn');
-                
                 btn.innerText = 'Setting...';
                 btn.disabled = true;
-                
                 try {
-                    // Unlock
                     await unlock(ctx);
-                    
-                    // Set return rate to 100Hz (0x09)
                     await sendRaw(ctx, [0xFF, 0xAA, 0x03, 0x09, 0x00]);
                     await new Promise(r => setTimeout(r, 200));
-                    
-                    // Save configuration
                     await save(ctx);
-                    
                     btn.innerText = '✓ Set to 100Hz!';
                     btn.classList.remove('bg-orange-600', 'hover:bg-orange-500');
                     btn.classList.add('bg-green-600');
-                    
-                    alert('Output rate set to 100Hz and saved!\n\nThe sensor should now respond faster. Check the Hz indicator on the card.');
+                    alert('Output rate set to 100Hz and saved!');
                 } catch(e) {
                     console.error(e);
                     btn.innerText = 'Error - Try Again';
@@ -556,7 +1230,7 @@
             });
 
             liveCard.querySelector('.factory-reset-btn').addEventListener('click', async () => {
-                if(!confirm("WARNING: This will restore factory defaults (including 10Hz rate). Continue?")) return;
+                if (!confirm("WARNING: This will restore factory defaults. Continue?")) return;
                 const ctx = devices.get(device.id);
                 await unlock(ctx);
                 await sendRaw(ctx, [0xFF, 0xAA, 0x00, 0x01, 0x00]);
@@ -564,174 +1238,58 @@
                 alert("Factory reset command sent. Please restart the sensor.");
             });
 
-            liveCard.querySelector('.calib-accel-btn').addEventListener('click', async () => {
-                if(!confirm("Sensor FLAT? Calibrating...")) return;
-                const ctx = devices.get(device.id);
-                await unlock(ctx);
-                await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x01, 0x00]); 
-                setTimeout(async () => { await save(ctx); alert("Accel Calibrated."); }, 5000);
-            });
-
-            liveCard.querySelector('.calib-mag-btn').addEventListener('click', async (e) => {
-                const ctx = devices.get(device.id);
-                const btn = e.currentTarget;
-                const viz = liveCard.querySelector('.mag-viz-container');
-                if(!ctx.isMagCalibrating) {
-                    if(!confirm("Start Compass Calibration?")) return;
-                    await unlock(ctx);
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x07, 0x00]); 
-                    ctx.isMagCalibrating = true;
-                    btn.classList.replace('bg-slate-700', 'bg-green-600');
-                    btn.querySelector('span:nth-child(2)').innerText = "FINISH (Save)";
-                    viz.classList.remove('hidden');
-                    ctx.magPollInterval = setInterval(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x3A, 0x00]), 100);
-                } else {
-                    clearInterval(ctx.magPollInterval);
-                    await unlock(ctx);
-                    await sendRaw(ctx, [0xFF, 0xAA, 0x01, 0x00, 0x00]); 
-                    setTimeout(async () => { await save(ctx); alert("Mag Saved."); }, 500);
-                    ctx.isMagCalibrating = false;
-                    btn.classList.replace('bg-green-600', 'bg-slate-700');
-                    btn.querySelector('span:nth-child(2)').innerText = "Mag Calib";
-                    viz.classList.add('hidden');
-                    magChart.data.datasets[0].data = []; magChart.update();
-                }
-            });
-
             liveCard.querySelector('.disconnect-btn').addEventListener('click', () => {
-                if(confirm("Remove this sensor?")) removeDevice(device.id);
+                if (confirm("Remove this sensor?")) removeDevice(device.id);
             });
 
+            // Visualization offset sliders
             const updateAlign = () => {
-                const r = { x: liveCard.querySelector('.slider-rot-x').value, y: liveCard.querySelector('.slider-rot-y').value, z: liveCard.querySelector('.slider-rot-z').value };
+                const r = { 
+                    x: parseInt(liveCard.querySelector('.slider-rot-x').value), 
+                    y: parseInt(liveCard.querySelector('.slider-rot-y').value), 
+                    z: parseInt(liveCard.querySelector('.slider-rot-z').value) 
+                };
                 alignmentGroup.rotation.set(r.x * Math.PI/180, r.y * Math.PI/180, r.z * Math.PI/180);
+                liveCard.querySelector('.val-rot-x').innerText = r.x + '°';
+                liveCard.querySelector('.val-rot-y').innerText = r.y + '°';
+                liveCard.querySelector('.val-rot-z').innerText = r.z + '°';
                 saveSettings(device.id, { rot: r });
             };
             liveCard.querySelectorAll('input[type="range"]').forEach(i => i.addEventListener('input', updateAlign));
 
-            return { scene, camera, renderer, mesh: dataGroup, chart, magChart, card: liveCard };
+            return { scene, camera, renderer, mesh: dataGroup, alignmentGroup, chart, card: liveCard };
         }
 
-        function updateSheetAngles() {
-            // Find pairs and calculate angle
-            const boards = [];
-            const struts = [];
-            
-            devices.forEach(ctx => {
-                if(ctx.assignedRole === "Board 1") boards[1] = ctx;
-                if(ctx.assignedRole === "Board 2") boards[2] = ctx;
-                if(ctx.assignedRole === "Strut 1") struts[1] = ctx;
-                if(ctx.assignedRole === "Strut 2") struts[2] = ctx;
-            });
-
-            [1, 2].forEach(i => {
-                if(boards[i]) {
-                    const boardCtx = boards[i];
-                    const display = boardCtx.ui.card.querySelector('.val-sheet-angle');
-                    
-                    if(struts[i]) {
-                        const boardComp = boardCtx.lastCompass || 0;
-                        const strutComp = struts[i].lastCompass || 0;
-                        
-                        // Calculation: (Board - Strut) normalized, then * -1
-                        let diff = boardComp - strutComp;
-                        
-                        // Normalize to -180...180
-                        if (diff > 180) diff -= 360;
-                        if (diff < -180) diff += 360;
-                        
-                        // Invert
-                        const sheetAngle = diff * -1;
-                        
-                        display.innerText = sheetAngle.toFixed(0) + "°";
-                    } else {
-                        display.innerText = "-- (No Strut)";
-                    }
-                }
-            });
-        }
+        // ==================== DATA HANDLING ====================
 
         function handleData(event, id) {
             const ctx = devices.get(id);
-            if(!ctx) return;
+            if (!ctx) return;
             
             const buffer = new Uint8Array(event.target.value.buffer);
-            if(buffer.length < 2) return;
+            if (buffer.length < 2) return;
 
-            for(let i = 0; i < buffer.length - 1; i++) {
-                if(buffer[i] !== 0x55) continue;
+            for (let i = 0; i < buffer.length - 1; i++) {
+                if (buffer[i] !== 0x55) continue;
                 
                 const packetType = buffer[i + 1];
                 
-                // Helper to get signed short
-                const getS = (offset) => {
-                    let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
-                    return v >= 32768 ? v - 65536 : v;
-                };
-
-                // Packet 0x61: Acc/Gyro/Angle (Often sent with 0x51 in BLE, or alone)
-                // We use this to get AccY even if we are in Quat mode
-                if(packetType === 0x61) {
-                    if(i + 20 > buffer.length) continue;
+                // Quaternion data (polled response)
+                if (packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
+                    if (i + 12 > buffer.length) continue;
                     
-                    // Acc Y is at offset 4 (bytes 2 and 3 of payload)
-                    // Formula: Raw / 32768 * 16g
-                    const accY = getS(4) / 32768.0 * 16.0;
-                    
-                    ctx.lastAccY = accY;
-                    ctx.ui.card.querySelector('.val-acc-y').innerText = accY.toFixed(2) + "g";
-                    
-                    // If NOT in Quat mode, we also read angles from here
-                    if(!ctx.quatMode) {
-                        const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
-                        const pitch = angX, roll = -angY;
-                        let compass = -angZ; if(compass < 0) compass += 360; compass %= 360;
-                        
-                        ctx.lastCompass = compass;
-                        updateSheetAngles(); // Update shared logic
-
-                        ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
-                        ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
-                        ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
-
-                        if (ctx.ui.mesh) {
-                            const e = new THREE.Euler(pitch*(Math.PI/180), compass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
-                            ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
-                        }
-                        
-                        const c = ctx.ui.chart;
-                        c.data.datasets[0].data.push(pitch); 
-                        c.data.datasets[1].data.push(roll); 
-                        c.data.datasets[2].data.push(compass);
-                        c.data.datasets[3].data.push(accY);
-                        if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
-                        c.update();
-                        
-                        if(isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: compass, accY });
-                    } else {
-                         // In Quat mode, we still want to log/chart Acc Y if available here
-                         // We update the chart/log in the 0x51 block usually, but 0x51 is a different packet.
-                         // If 0x61 arrives interleaved with 0x51, we just store lastAccY and use it when 0x51 processed
-                         // OR update chart here? Better to update in the main angle update loop to keep sync.
-                         // But 0x51 might come way later. 
-                         // For simplicity, if we are in Quat Mode, we just store lastAccY here.
-                    }
-                    
-                    i += 19;
-                    continue;
-                }
-                
-                // Packet 0x51: Quaternion (Subtype 0x51 of 0x71)
-                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x51) {
-                    if(i + 12 > buffer.length) continue;
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
                     
                     const q0 = getS(4) / 32768.0;
                     const q1 = getS(6) / 32768.0;
                     const q2 = getS(8) / 32768.0;
                     const q3 = getS(10) / 32768.0;
                     
-                    const modeLbl = ctx.ui.card.querySelector('.mode-indicator');
-                    if(!ctx.quatMode) {
+                    if (!ctx.quatMode) {
+                        const modeLbl = ctx.ui.card.querySelector('.mode-indicator');
                         modeLbl.innerText = "Mode: Quaternion (Polled)";
                         modeLbl.classList.remove('text-slate-500');
                         modeLbl.classList.add('text-green-500');
@@ -756,32 +1314,36 @@
                     const wy = Math.max(-1, Math.min(1, vWing.y));
                     let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
-                    if(compass < 0) compass += 360;
+                    if (compass < 0) compass += 360;
 
-                    ctx.lastCompass = compass;
-                    updateSheetAngles(); // Update shared logic
+                    // Apply orientation transform
+                    const transform = getOrientationTransform(ctx);
+                    const adjustedCompass = applyOrientationToHeading(compass, transform);
+                    
+                    ctx.lastHeading = adjustedCompass;
+                    ctx.lastPitch = pitchDeg;
+                    ctx.lastRoll = rollDeg;
 
                     ctx.ui.card.querySelector('.val-ang-x').innerText = pitchDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
-                    ctx.ui.card.querySelector('.val-ang-z').innerText = compass.toFixed(0) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = adjustedCompass.toFixed(0) + "°";
 
                     if (ctx.ui.mesh) ctx.ui.mesh.userData.targetQuat.copy(q);
 
                     const c = ctx.ui.chart;
                     c.data.datasets[0].data.push(pitchDeg);
                     c.data.datasets[1].data.push(rollDeg);
-                    c.data.datasets[2].data.push(compass);
-                    // Push the last known AccY (from 0x61 packet usually)
-                    c.data.datasets[3].data.push(ctx.lastAccY || 0);
-                    
-                    if(c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                    c.data.datasets[2].data.push(adjustedCompass);
+                    if (c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
                     c.update();
                     
-                    if(isRecording) {
+                    // Update sheet angles
+                    updateAllSheetAngles();
+                    
+                    if (isRecording) {
                         ctx.dataLog.push({ 
                             t: Date.now() - recordingStartTime, 
-                            pitch: pitchDeg, roll: rollDeg, yaw: compass,
-                            accY: ctx.lastAccY || 0,
+                            pitch: pitchDeg, roll: rollDeg, yaw: adjustedCompass,
                             q0, q1, q2, q3
                         });
                     }
@@ -790,29 +1352,98 @@
                     continue;
                 }
                 
-                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x64) {
-                    if(i + 6 > buffer.length) continue;
-                    const raw = (buffer[i + 5] << 8) | buffer[i + 4];
-                    const voltage = raw / 100;
-                    let pct = Math.round((voltage - 3.5) / (4.2 - 3.5) * 100);
-                    if(pct < 0) pct = 0; if(pct > 100) pct = 100;
-                    ctx.ui.card.querySelector('.bat-val').innerText = pct + "%";
-                    if(pct < 20) ctx.ui.card.querySelector('.battery-indicator').classList.replace('text-slate-400', 'text-red-500');
+                // Euler angle data (auto-push)
+                if (packetType === 0x61) {
+                    if (ctx.quatMode) { i += 19; continue; }
+                    if (i + 20 > buffer.length) continue;
+                    
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
+                    
+                    const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
+                    const pitch = angX, roll = -angY;
+                    let compass = -angZ; 
+                    if (compass < 0) compass += 360; 
+                    compass %= 360;
+
+                    // Apply orientation transform
+                    const transform = getOrientationTransform(ctx);
+                    const adjustedCompass = applyOrientationToHeading(compass, transform);
+                    
+                    ctx.lastHeading = adjustedCompass;
+                    ctx.lastPitch = pitch;
+                    ctx.lastRoll = roll;
+
+                    ctx.ui.card.querySelector('.val-ang-x').innerText = pitch.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-y').innerText = roll.toFixed(1) + "°";
+                    ctx.ui.card.querySelector('.val-ang-z').innerText = adjustedCompass.toFixed(0) + "°";
+
+                    if (ctx.ui.mesh) {
+                        const e = new THREE.Euler(pitch*(Math.PI/180), adjustedCompass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
+                        ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
+                    }
+                    
+                    const c = ctx.ui.chart;
+                    c.data.datasets[0].data.push(pitch); 
+                    c.data.datasets[1].data.push(roll); 
+                    c.data.datasets[2].data.push(adjustedCompass);
+                    if (c.data.datasets[0].data.length > 50) c.data.datasets.forEach(d => d.data.shift());
+                    c.update();
+                    
+                    // Update sheet angles
+                    updateAllSheetAngles();
+                    
+                    if (isRecording) ctx.dataLog.push({ t: Date.now()-recordingStartTime, pitch, roll, yaw: adjustedCompass });
+                    
                     i += 19;
                     continue;
                 }
                 
-                if(packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
-                    if(i + 8 > buffer.length) continue;
-                    const mc = ctx.ui.magChart;
-                    mc.data.datasets[0].data.push({ x: getS(4), y: getS(6) });
-                    if(mc.data.datasets[0].data.length > 300) mc.data.datasets[0].data.shift();
-                    mc.update();
+                // Battery data
+                if (packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x64) {
+                    if (i + 6 > buffer.length) continue;
+                    const raw = (buffer[i + 5] << 8) | buffer[i + 4];
+                    const voltage = raw / 100;
+                    let pct = Math.round((voltage - 3.5) / (4.2 - 3.5) * 100);
+                    if (pct < 0) pct = 0; 
+                    if (pct > 100) pct = 100;
+                    ctx.ui.card.querySelector('.bat-val').innerText = pct + "%";
+                    if (pct < 20) ctx.ui.card.querySelector('.battery-indicator').classList.replace('text-slate-400', 'text-red-500');
+                    i += 19;
+                    continue;
+                }
+                
+                // Magnetometer data (for calibration)
+                if (packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
+                    if (i + 8 > buffer.length) continue;
+                    const getS = (offset) => {
+                        let v = (buffer[i + offset + 1] << 8) | buffer[i + offset];
+                        return v >= 32768 ? v - 65536 : v;
+                    };
+                    
+                    const magX = getS(4);
+                    const magY = getS(6);
+                    const magZ = getS(8);
+                    
+                    // Store for health calculation
+                    if (!ctx.magHistory) ctx.magHistory = [];
+                    ctx.magHistory.push({ x: magX, y: magY, z: magZ });
+                    if (ctx.magHistory.length > 50) ctx.magHistory.shift();
+                    
+                    // Update calibration if active
+                    if (ctx.isMagCalibrating) {
+                        updateMagCalibProgress(ctx, magX, magY, magZ);
+                    }
+                    
                     i += 19;
                     continue;
                 }
             }
         }
+
+        // ==================== RECORDING ====================
 
         function startSyncRecording() {
             syncTimestamp = new Date().toISOString();
@@ -838,8 +1469,6 @@
                 osc.start();
                 setTimeout(() => osc.stop(), 150);
             } catch(e) {}
-            
-            console.log('Recording started - Sync timestamp: ' + syncTimestamp);
         }
 
         function stopRecording() {
@@ -848,11 +1477,6 @@
             
             document.getElementById('syncBanner').classList.add('hidden');
             document.getElementById('recordBtn').classList.remove('hidden');
-            
-            let totalPoints = 0;
-            devices.forEach(ctx => totalPoints += ctx.dataLog.length);
-            
-            console.log('Recording stopped - Total data points: ' + totalPoints);
             
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -886,36 +1510,37 @@
             if (devices.size === 0) { alert("No devices connected!"); return; }
             
             let hasData = false;
-            devices.forEach(ctx => { if(ctx.dataLog.length > 0) hasData = true; });
+            devices.forEach(ctx => { if (ctx.dataLog.length > 0) hasData = true; });
             if (!hasData) { alert("No recorded data to export. Click 'Sync & Record' first!"); return; }
             
             devices.forEach((ctx, id) => {
                 const deviceName = ctx.device.name || 'Unknown';
-                const role = ctx.assignedRole || 'None';
+                const roleName = ctx.role || 'unassigned';
                 const mode = ctx.quatMode ? 'Quaternion' : 'Euler';
                 
                 let csv = '# WitMotion Pro - Session Export\n';
                 csv += '# Session Sync: ' + (syncTimestamp || 'Not synchronized') + '\n';
                 csv += '# Device: ' + deviceName + ' (ID: ' + id + ')\n';
-                csv += '# Assigned Role: ' + role + '\n';
+                csv += '# Role: ' + roleName + '\n';
                 csv += '# Mode: ' + mode + '\n';
                 csv += '# Data Points: ' + ctx.dataLog.length + '\n';
                 csv += '# Export Time: ' + new Date().toISOString() + '\n#\n';
                 
                 if (ctx.quatMode && ctx.dataLog[0] && ctx.dataLog[0].q0 !== undefined) {
-                    csv += 'Time(ms),Pitch,Roll,Yaw,AccY,Q0,Q1,Q2,Q3\n';
+                    csv += 'Time(ms),Pitch,Roll,Yaw,Q0,Q1,Q2,Q3\n';
                     csv += ctx.dataLog.map(r => 
-                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + (r.accY || 0).toFixed(3) + ',' + r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
+                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + 
+                        r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
                     ).join('\n');
                 } else {
-                    csv += 'Time(ms),Pitch,Roll,Yaw,AccY\n';
-                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + (r.accY || 0).toFixed(3)).join('\n');
+                    csv += 'Time(ms),Pitch,Roll,Yaw\n';
+                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3)).join('\n');
                 }
                 
                 const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
                 const a = document.createElement('a'); 
                 a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); 
-                a.download = deviceName + '_' + role.replace(' ','') + '_' + timestamp + '.csv'; 
+                a.download = deviceName + '_' + roleName + '_' + timestamp + '.csv'; 
                 a.click();
             });
             
