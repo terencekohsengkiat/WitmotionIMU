@@ -230,9 +230,27 @@
                             </button>
                         </div>
 
+                        <!-- Compass Offset Section -->
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Compass Offset</h4>
+                            <div class="bg-yellow-900/30 border border-yellow-700 rounded p-3">
+                                <div class="text-sm font-bold text-yellow-300 mb-2">🧭 Manual Compass Correction</div>
+                                <div class="text-xs text-yellow-200/70 mb-3">
+                                    Place sensor flat, check with a real compass, then enter the difference.<br>
+                                    <strong>Offset = Real Compass - Sensor Reading</strong>
+                                </div>
+                                <div class="flex gap-2 items-center">
+                                    <input type="number" class="compass-offset-input bg-slate-900 border border-slate-600 text-white text-sm rounded block w-24 p-2 text-center" placeholder="0" min="-180" max="180" value="0">
+                                    <span class="text-yellow-300">degrees</span>
+                                    <button class="apply-compass-offset-btn bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded text-sm font-bold">Apply</button>
+                                </div>
+                                <div class="text-[10px] text-yellow-300/50 mt-2">Current offset: <span class="current-compass-offset">0°</span></div>
+                            </div>
+                        </div>
+
                         <!-- Sensor Orientation Section -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Sensor Mounting Orientation</h4>
+                            <h4 class="text-xs font-bold text-cyan-400 uppercase tracking-widest border-b border-slate-700 pb-1">4. Sensor Mounting Orientation</h4>
                             
                             <!-- Board Orientation (shown when role is board) -->
                             <div class="board-orientation-settings space-y-3">
@@ -291,7 +309,7 @@
 
                         <!-- Visualization Offset -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-green-400 uppercase tracking-widest border-b border-slate-700 pb-1">4. Visualization Offset</h4>
+                            <h4 class="text-xs font-bold text-green-400 uppercase tracking-widest border-b border-slate-700 pb-1">5. Visualization Offset</h4>
                             <div class="space-y-4">
                                 <div><div class="flex justify-between text-xs mb-1"><span>Pitch Offset (X)</span><span class="val-rot-x text-blue-400">0°</span></div><input type="range" class="slider-rot-x w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
                                 <div><div class="flex justify-between text-xs mb-1"><span>Roll Offset (Y)</span><span class="val-rot-y text-blue-400">0°</span></div><input type="range" class="slider-rot-y w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" min="0" max="360" value="0"></div>
@@ -478,7 +496,26 @@
             return boardDeviceId ? devices.get(boardDeviceId) : null;
         }
 
-        // ==================== SHEET ANGLE CALCULATION ====================
+        // ==================== SHEET ANGLE / TACK CALCULATION ====================
+
+        function getTackFromRoll(rollAngle) {
+            // Based on wing roll angle:
+            // -15 to +15 = Neutral
+            // -15 to -135 = Starboard
+            // +15 to +135 = Port
+            if (rollAngle === null || isNaN(rollAngle)) return { tack: '--', color: 'text-slate-400' };
+            
+            if (rollAngle >= -15 && rollAngle <= 15) {
+                return { tack: 'NEUTRAL', color: 'text-yellow-400' };
+            } else if (rollAngle < -15 && rollAngle >= -135) {
+                return { tack: 'STARBOARD', color: 'text-green-400' };
+            } else if (rollAngle > 15 && rollAngle <= 135) {
+                return { tack: 'PORT', color: 'text-red-400' };
+            } else {
+                // Beyond ±135° (wing is nearly inverted)
+                return { tack: 'INVERTED', color: 'text-purple-400' };
+            }
+        }
 
         function calculateSheetAngle(boardHeading, wingHeading) {
             let diff = wingHeading - boardHeading;
@@ -486,20 +523,6 @@
             while (diff > 180) diff -= 360;
             while (diff < -180) diff += 360;
             return diff;
-        }
-
-        function getTackLabel(sheetAngle) {
-            if (sheetAngle === null || isNaN(sheetAngle)) return '--';
-            if (sheetAngle > 0) return 'STARBOARD';
-            if (sheetAngle < 0) return 'PORT';
-            return 'NEUTRAL';
-        }
-
-        function getTackColor(sheetAngle) {
-            if (sheetAngle === null || isNaN(sheetAngle)) return 'text-slate-400';
-            if (sheetAngle > 0) return 'text-green-400';
-            if (sheetAngle < 0) return 'text-red-400';
-            return 'text-slate-400';
         }
 
         function updateAllSheetAngles() {
@@ -515,18 +538,26 @@
             const pairingContainer = ctx.ui.card.querySelector('.wing-pairing-container');
             
             if (isWingRole(ctx.role)) {
-                // Wing: show sheet angle based on paired board
+                // Wing: show sheet angle and tack based on roll
                 container.classList.remove('hidden');
                 pairingContainer.classList.remove('hidden');
                 
                 const boardCtx = getPairedBoard(ctx);
+                
+                // Calculate sheet angle from heading difference
                 if (boardCtx && boardCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
                     const sheetAngle = calculateSheetAngle(boardCtx.lastHeading, ctx.lastHeading);
                     valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
-                    tackEl.innerText = getTackLabel(sheetAngle);
-                    tackEl.className = 'text-lg font-bold tack-label ' + getTackColor(sheetAngle);
                 } else {
                     valueEl.innerText = '--';
+                }
+                
+                // Tack is determined by wing roll, not sheet angle
+                if (ctx.lastRoll !== undefined) {
+                    const tackInfo = getTackFromRoll(ctx.lastRoll);
+                    tackEl.innerText = tackInfo.tack;
+                    tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
+                } else {
                     tackEl.innerText = '--';
                     tackEl.className = 'text-lg font-bold tack-label text-slate-400';
                 }
@@ -544,13 +575,27 @@
                     }
                 });
                 
-                if (pairedWingCtx && pairedWingCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
+                if (pairedWingCtx) {
                     container.classList.remove('hidden');
                     pairingContainer.classList.add('hidden');
-                    const sheetAngle = calculateSheetAngle(ctx.lastHeading, pairedWingCtx.lastHeading);
-                    valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
-                    tackEl.innerText = getTackLabel(sheetAngle);
-                    tackEl.className = 'text-lg font-bold tack-label ' + getTackColor(sheetAngle);
+                    
+                    // Calculate sheet angle
+                    if (pairedWingCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
+                        const sheetAngle = calculateSheetAngle(ctx.lastHeading, pairedWingCtx.lastHeading);
+                        valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                    } else {
+                        valueEl.innerText = '--';
+                    }
+                    
+                    // Tack from wing roll
+                    if (pairedWingCtx.lastRoll !== undefined) {
+                        const tackInfo = getTackFromRoll(pairedWingCtx.lastRoll);
+                        tackEl.innerText = tackInfo.tack;
+                        tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
+                    } else {
+                        tackEl.innerText = '--';
+                        tackEl.className = 'text-lg font-bold tack-label text-slate-400';
+                    }
                 } else {
                     container.classList.add('hidden');
                 }
@@ -920,7 +965,8 @@
                 boardZAxis: 'sky',
                 wingYAxis: 'leading-edge',
                 wingZAxis: 'ground',
-                pairing: null
+                pairing: null,
+                compassOffset: 0
             };
         }
         
@@ -1006,7 +1052,10 @@
                     isWriting: false,
                     role: initialRole,
                     pairing: settings.pairing || getRoleNumber(initialRole),
+                    compassOffset: settings.compassOffset || 0,
                     lastHeading: undefined,
+                    lastPitch: undefined,
+                    lastRoll: undefined,
                     magHistory: [],
                     lastHealth: 50
                 };
@@ -1142,6 +1191,11 @@
                 liveCard.querySelector('.wing-y-axis').value = savedSettings.wingYAxis || 'leading-edge';
                 liveCard.querySelector('.wing-z-axis').value = savedSettings.wingZAxis || 'ground';
                 
+                // Compass offset
+                const compassOffset = savedSettings.compassOffset || 0;
+                liveCard.querySelector('.compass-offset-input').value = compassOffset;
+                liveCard.querySelector('.current-compass-offset').innerText = compassOffset + '°';
+                
                 // Quat status
                 const statusEl = liveCard.querySelector('.quat-status-indicator');
                 if (ctx && ctx.quatMode) {
@@ -1161,6 +1215,15 @@
             liveCard.querySelector('.close-settings').addEventListener('click', () => {
                 modal.classList.add('hidden'); 
                 modal.classList.remove('flex');
+            });
+
+            // Compass offset
+            liveCard.querySelector('.apply-compass-offset-btn').addEventListener('click', () => {
+                const offsetInput = liveCard.querySelector('.compass-offset-input');
+                const offset = parseInt(offsetInput.value) || 0;
+                saveSettings(device.id, { compassOffset: offset });
+                liveCard.querySelector('.current-compass-offset').innerText = offset + '°';
+                alert('Compass offset of ' + offset + '° applied!');
             });
 
             // Calibration modal
@@ -1345,18 +1408,30 @@
 
                     const q = new THREE.Quaternion(q1, q3, -q2, q0);
 
-                    const vNose = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
-                    const vWing = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+                    // Get direction vectors
+                    const vNose = new THREE.Vector3(0, 0, -1).applyQuaternion(q);  // Forward direction
+                    const vWing = new THREE.Vector3(1, 0, 0).applyQuaternion(q);   // Right direction
+                    const vUp = new THREE.Vector3(0, 1, 0).applyQuaternion(q);     // Up direction
 
+                    // Pitch: how much the nose is pointing up/down
                     const pitchDeg = Math.asin(Math.max(-1, Math.min(1, vNose.y))) * (180/Math.PI);
-                    const wy = Math.max(-1, Math.min(1, vWing.y));
-                    let rollDeg = Math.asin(wy) * (180/Math.PI) * -1;
+                    
+                    // Roll: use atan2 for full -180 to +180 range
+                    // This measures the rotation around the forward axis
+                    let rollDeg = Math.atan2(-vWing.y, vUp.y) * (180/Math.PI);
+                    
+                    // Compass/Heading
                     let compass = Math.atan2(vNose.x, vNose.z) * (180/Math.PI);
                     if (compass < 0) compass += 360;
 
-                    // Apply orientation transform
+                    // Apply orientation transform and compass offset
                     const transform = getOrientationTransform(ctx);
-                    const adjustedCompass = applyOrientationToHeading(compass, transform);
+                    let adjustedCompass = applyOrientationToHeading(compass, transform);
+                    
+                    // Apply manual compass offset
+                    const settings = loadSettings(ctx.device.id);
+                    const compassOffset = settings.compassOffset || 0;
+                    adjustedCompass = (adjustedCompass + compassOffset + 360) % 360;
                     
                     ctx.lastHeading = adjustedCompass;
                     ctx.lastPitch = pitchDeg;
@@ -1401,14 +1476,27 @@
                     };
                     
                     const angX = getS(14)/32768*180, angY = getS(16)/32768*180, angZ = getS(18)/32768*180;
-                    const pitch = angX, roll = -angY;
+                    
+                    // Note: In Euler mode, we don't have full quaternion data, so roll is limited
+                    // This is a limitation of the sensor's Euler output mode
+                    const pitch = angX;
+                    let roll = -angY;
+                    
+                    // For Euler mode, we can try to extend roll range by checking if sensor is inverted
+                    // But this is less reliable than quaternion mode
+                    
                     let compass = -angZ; 
                     if (compass < 0) compass += 360; 
                     compass %= 360;
 
-                    // Apply orientation transform
+                    // Apply orientation transform and compass offset
                     const transform = getOrientationTransform(ctx);
-                    const adjustedCompass = applyOrientationToHeading(compass, transform);
+                    let adjustedCompass = applyOrientationToHeading(compass, transform);
+                    
+                    // Apply manual compass offset
+                    const settings = loadSettings(ctx.device.id);
+                    const compassOffset = settings.compassOffset || 0;
+                    adjustedCompass = (adjustedCompass + compassOffset + 360) % 360;
                     
                     ctx.lastHeading = adjustedCompass;
                     ctx.lastPitch = pitch;
