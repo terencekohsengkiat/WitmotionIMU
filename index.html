@@ -511,25 +511,38 @@
             // -15 to +15 = Neutral
             // -15 to -135 = Starboard
             // +15 to +135 = Port
-            if (rollAngle === null || isNaN(rollAngle)) return { tack: '--', color: 'text-slate-400' };
+            if (rollAngle === null || rollAngle === undefined || isNaN(rollAngle)) {
+                return { tack: '--', color: 'text-slate-400', isValid: false };
+            }
             
             if (rollAngle >= -15 && rollAngle <= 15) {
-                return { tack: 'NEUTRAL', color: 'text-yellow-400' };
+                return { tack: 'NEUTRAL', color: 'text-yellow-400', isValid: false };
             } else if (rollAngle < -15 && rollAngle >= -135) {
-                return { tack: 'STARBOARD', color: 'text-green-400' };
+                return { tack: 'STARBOARD', color: 'text-green-400', isValid: true, isStarboard: true };
             } else if (rollAngle > 15 && rollAngle <= 135) {
-                return { tack: 'PORT', color: 'text-red-400' };
+                return { tack: 'PORT', color: 'text-red-400', isValid: true, isStarboard: false };
             } else {
                 // Beyond ±135° (wing is nearly inverted)
-                return { tack: 'INVERTED', color: 'text-purple-400' };
+                return { tack: 'INVERTED', color: 'text-purple-400', isValid: false };
             }
         }
 
-        function calculateSheetAngle(boardHeading, wingHeading) {
+        function calculateSheetAngle(boardHeading, wingHeading, tackInfo) {
+            // If tack is not valid (neutral or inverted), return null
+            if (!tackInfo || !tackInfo.isValid) {
+                return null;
+            }
+            
             let diff = wingHeading - boardHeading;
             // Normalize to [-180, 180]
             while (diff > 180) diff -= 360;
             while (diff < -180) diff += 360;
+            
+            // On PORT tack, invert the sign
+            if (!tackInfo.isStarboard) {
+                diff = -diff;
+            }
+            
             return diff;
         }
 
@@ -552,22 +565,21 @@
                 
                 const boardCtx = getPairedBoard(ctx);
                 
-                // Calculate sheet angle from heading difference
+                // Get tack from wing roll
+                const tackInfo = getTackFromRoll(ctx.lastRoll);
+                tackEl.innerText = tackInfo.tack;
+                tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
+                
+                // Calculate sheet angle from heading difference (sign depends on tack)
                 if (boardCtx && boardCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
-                    const sheetAngle = calculateSheetAngle(boardCtx.lastHeading, ctx.lastHeading);
-                    valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                    const sheetAngle = calculateSheetAngle(boardCtx.lastHeading, ctx.lastHeading, tackInfo);
+                    if (sheetAngle !== null) {
+                        valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                    } else {
+                        valueEl.innerText = 'N/A';
+                    }
                 } else {
                     valueEl.innerText = '--';
-                }
-                
-                // Tack is determined by wing roll, not sheet angle
-                if (ctx.lastRoll !== undefined) {
-                    const tackInfo = getTackFromRoll(ctx.lastRoll);
-                    tackEl.innerText = tackInfo.tack;
-                    tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
-                } else {
-                    tackEl.innerText = '--';
-                    tackEl.className = 'text-lg font-bold tack-label text-slate-400';
                 }
             } else if (isBoardRole(ctx.role)) {
                 // Board: show sheet angle if paired wing exists
@@ -587,22 +599,21 @@
                     container.classList.remove('hidden');
                     pairingContainer.classList.add('hidden');
                     
+                    // Get tack from wing roll
+                    const tackInfo = getTackFromRoll(pairedWingCtx.lastRoll);
+                    tackEl.innerText = tackInfo.tack;
+                    tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
+                    
                     // Calculate sheet angle
                     if (pairedWingCtx.lastHeading !== undefined && ctx.lastHeading !== undefined) {
-                        const sheetAngle = calculateSheetAngle(ctx.lastHeading, pairedWingCtx.lastHeading);
-                        valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                        const sheetAngle = calculateSheetAngle(ctx.lastHeading, pairedWingCtx.lastHeading, tackInfo);
+                        if (sheetAngle !== null) {
+                            valueEl.innerText = (sheetAngle >= 0 ? '+' : '') + sheetAngle.toFixed(0) + '°';
+                        } else {
+                            valueEl.innerText = 'N/A';
+                        }
                     } else {
                         valueEl.innerText = '--';
-                    }
-                    
-                    // Tack from wing roll
-                    if (pairedWingCtx.lastRoll !== undefined) {
-                        const tackInfo = getTackFromRoll(pairedWingCtx.lastRoll);
-                        tackEl.innerText = tackInfo.tack;
-                        tackEl.className = 'text-lg font-bold tack-label ' + tackInfo.color;
-                    } else {
-                        tackEl.innerText = '--';
-                        tackEl.className = 'text-lg font-bold tack-label text-slate-400';
                     }
                 } else {
                     container.classList.add('hidden');
