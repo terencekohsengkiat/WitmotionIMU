@@ -1729,38 +1729,186 @@
             devices.forEach(ctx => { if (ctx.dataLog.length > 0) hasData = true; });
             if (!hasData) { alert("No recorded data to export. Click 'Sync & Record' first!"); return; }
             
-            devices.forEach((ctx, id) => {
-                const deviceName = ctx.device.name || 'Unknown';
-                const roleName = ctx.role || 'unassigned';
-                const mode = ctx.quatMode ? 'Quaternion' : 'Euler';
-                
-                let csv = '# WitMotion Pro - Session Export\n';
-                csv += '# Session Sync: ' + (syncTimestamp || 'Not synchronized') + '\n';
-                csv += '# Device: ' + deviceName + ' (ID: ' + id + ')\n';
-                csv += '# Role: ' + roleName + '\n';
-                csv += '# Mode: ' + mode + '\n';
-                csv += '# Data Points: ' + ctx.dataLog.length + '\n';
-                csv += '# Export Time: ' + new Date().toISOString() + '\n#\n';
-                
-                if (ctx.quatMode && ctx.dataLog[0] && ctx.dataLog[0].q0 !== undefined) {
-                    csv += 'Time(ms),Pitch,Roll,Yaw,Q0,Q1,Q2,Q3\n';
-                    csv += ctx.dataLog.map(r => 
-                        r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3) + ',' + 
-                        r.q0.toFixed(6) + ',' + r.q1.toFixed(6) + ',' + r.q2.toFixed(6) + ',' + r.q3.toFixed(6)
-                    ).join('\n');
-                } else {
-                    csv += 'Time(ms),Pitch,Roll,Yaw\n';
-                    csv += ctx.dataLog.map(r => r.t + ',' + r.pitch.toFixed(3) + ',' + r.roll.toFixed(3) + ',' + r.yaw.toFixed(3)).join('\n');
-                }
-                
-                const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
-                const a = document.createElement('a'); 
-                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); 
-                a.download = deviceName + '_' + roleName + '_' + timestamp + '.csv'; 
-                a.click();
+            // Generate unified CSV with 0.5 second averaging
+            const TIME_BIN_MS = 500; // 0.5 second bins
+            
+            // Find the maximum recording duration
+            let maxTime = 0;
+            devices.forEach(ctx => {
+                ctx.dataLog.forEach(entry => {
+                    if (entry.t > maxTime) maxTime = entry.t;
+                });
             });
             
-            alert('Exported ' + devices.size + ' CSV file(s).\nAll files share the same sync timestamp for alignment.');
+            // Build list of sensors sorted by role
+            const sensorList = [];
+            devices.forEach((ctx, id) => {
+                sensorList.push({
+                    id: id,
+                    ctx: ctx,
+                    role: ctx.role || 'unassigned',
+                    name: ctx.device.name || 'Unknown'
+                });
+            });
+            
+            // Sort: boards first (1-4), then wings (1-4)
+            sensorList.sort((a, b) => {
+                const aIsBoard = a.role.startsWith('board');
+                const bIsBoard = b.role.startsWith('board');
+                if (aIsBoard && !bIsBoard) return -1;
+                if (!aIsBoard && bIsBoard) return 1;
+                return a.role.localeCompare(b.role);
+            });
+            
+            // Circular average for compass headings
+            function circularAverage(angles) {
+                if (angles.length === 0) return null;
+                let sinSum = 0, cosSum = 0;
+                angles.forEach(a => {
+                    sinSum += Math.sin(a * Math.PI / 180);
+                    cosSum += Math.cos(a * Math.PI / 180);
+                });
+                let avg = Math.atan2(sinSum / angles.length, cosSum / angles.length) * 180 / Math.PI;
+                if (avg < 0) avg += 360;
+                return avg;
+            }
+            
+            // Regular average
+            function average(values) {
+                if (values.length === 0) return null;
+                return values.reduce((a, b) => a + b, 0) / values.length;
+            }
+            
+            // Build header row
+            let header = 'Time(s)';
+            sensorList.forEach(sensor => {
+                const prefix = sensor.role.replace('-', '');
+                const isWing = sensor.role.startsWith('wing');
+                
+                header += ',' + prefix + '_Pitch';
+                header += ',' + prefix + '_Roll';
+                if (isWing) {
+                    header += ',' + prefix + '_Roll_Min';
+                    header += ',' + prefix + '_Roll_Max';
+                }
+                header += ',' + prefix + '_Yaw';
+                if (isWing) {
+                    header += ',' + prefix + '_SheetAngle';
+                    header += ',' + prefix + '_Tack';
+                }
+                header += ',' + prefix + '_Samples';
+            });
+            
+            // Process data into time bins
+            const rows = [];
+            const numBins = Math.ceil(maxTime / TIME_BIN_MS) + 1;
+            
+            for (let binIndex = 0; binIndex < numBins; binIndex++) {
+                const binStart = binIndex * TIME_BIN_MS;
+                const binEnd = binStart + TIME_BIN_MS;
+                const timeSeconds = (binStart / 1000).toFixed(1);
+                
+                let row = timeSeconds;
+                
+                // For sheet angle calculation, we need board headings first
+                const boardHeadings = {};
+                sensorList.forEach(sensor => {
+                    if (sensor.role.startsWith('board')) {
+                        const entries = sensor.ctx.dataLog.filter(e => e.t >= binStart && e.t < binEnd);
+                        if (entries.length > 0) {
+                            const yaws = entries.map(e => e.yaw);
+                            boardHeadings[sensor.role] = circularAverage(yaws);
+                        }
+                    }
+                });
+                
+                sensorList.forEach(sensor => {
+                    const isWing = sensor.role.startsWith('wing');
+                    const entries = sensor.ctx.dataLog.filter(e => e.t >= binStart && e.t < binEnd);
+                    
+                    if (entries.length === 0) {
+                        // No data for this time bin - empty cells
+                        row += ',,,'; // pitch, roll, yaw
+                        if (isWing) {
+                            row += ',,,,'; // roll_min, roll_max, sheet_angle, tack
+                        }
+                        row += ',0'; // samples = 0
+                    } else {
+                        const pitches = entries.map(e => e.pitch);
+                        const rolls = entries.map(e => e.roll);
+                        const yaws = entries.map(e => e.yaw);
+                        
+                        const avgPitch = average(pitches);
+                        const avgRoll = average(rolls);
+                        const avgYaw = circularAverage(yaws);
+                        
+                        row += ',' + avgPitch.toFixed(2);
+                        row += ',' + avgRoll.toFixed(2);
+                        
+                        if (isWing) {
+                            const rollMin = Math.min(...rolls);
+                            const rollMax = Math.max(...rolls);
+                            row += ',' + rollMin.toFixed(2);
+                            row += ',' + rollMax.toFixed(2);
+                        }
+                        
+                        row += ',' + avgYaw.toFixed(1);
+                        
+                        if (isWing) {
+                            // Calculate sheet angle using paired board
+                            const wingNum = parseInt(sensor.role.split('-')[1]);
+                            const pairing = sensor.ctx.pairing || wingNum;
+                            const boardRole = 'board-' + pairing;
+                            const boardHeading = boardHeadings[boardRole];
+                            
+                            // Get tack from average roll
+                            let tackInfo = getTackFromRoll(avgRoll);
+                            
+                            if (boardHeading !== undefined && tackInfo.isValid) {
+                                let sheetAngle = avgYaw - boardHeading;
+                                while (sheetAngle > 180) sheetAngle -= 360;
+                                while (sheetAngle < -180) sheetAngle += 360;
+                                if (!tackInfo.isStarboard) sheetAngle = -sheetAngle;
+                                
+                                row += ',' + sheetAngle.toFixed(1);
+                                row += ',' + tackInfo.tack;
+                            } else if (!tackInfo.isValid) {
+                                row += ',N/A,' + tackInfo.tack;
+                            } else {
+                                row += ',,'; // No board data
+                            }
+                        }
+                        
+                        row += ',' + entries.length;
+                    }
+                });
+                
+                rows.push(row);
+            }
+            
+            // Build CSV content
+            let csv = '# WitMotion Pro - Unified Session Export\n';
+            csv += '# Session Sync: ' + (syncTimestamp || 'Not synchronized') + '\n';
+            csv += '# Duration: ' + Math.ceil(maxTime / 1000) + ' seconds\n';
+            csv += '# Time Bin: ' + TIME_BIN_MS + 'ms (0.5 second averages)\n';
+            csv += '# Sensors:\n';
+            sensorList.forEach(sensor => {
+                csv += '#   - ' + sensor.role + ': ' + sensor.name + ' (ID: ' + sensor.id + ')\n';
+            });
+            csv += '# Export Time: ' + new Date().toISOString() + '\n';
+            csv += '#\n';
+            csv += header + '\n';
+            csv += rows.join('\n');
+            
+            // Download
+            const timestamp = syncTimestamp ? syncTimestamp.replace(/[:.]/g, '-').slice(0, 19) : 'unsync';
+            const filename = 'wingfoil_session_' + timestamp + '.csv';
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); 
+            a.download = filename; 
+            a.click();
+            
+            alert('Exported unified CSV!\n\nFile: ' + filename + '\nSensors: ' + sensorList.length + '\nTime bins: ' + rows.length + ' (0.5s each)\nDuration: ' + Math.ceil(maxTime / 1000) + ' seconds');
         });
     </script>
 </body>
