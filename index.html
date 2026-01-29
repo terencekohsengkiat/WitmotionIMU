@@ -1517,7 +1517,15 @@
                     ctx.ui.card.querySelector('.val-ang-y').innerText = rollDeg.toFixed(1) + "°";
                     ctx.ui.card.querySelector('.val-ang-z').innerText = adjustedCompass.toFixed(0) + "°";
 
-                    if (ctx.ui.mesh) ctx.ui.mesh.userData.targetQuat.copy(q);
+                    // Apply compass offset to the 3D graphic as well
+                    if (ctx.ui.mesh) {
+                        // Create offset quaternion (rotation around Y axis - negative because Y rotation is opposite to compass)
+                        const offsetRad = -compassOffset * Math.PI / 180;
+                        const offsetQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), offsetRad);
+                        // Multiply: offsetQuat * q (pre-multiply to rotate in world space)
+                        const adjustedQuat = new THREE.Quaternion().multiplyQuaternions(offsetQuat, q);
+                        ctx.ui.mesh.userData.targetQuat.copy(adjustedQuat);
+                    }
 
                     const c = ctx.ui.chart;
                     c.data.datasets[0].data.push(pitchDeg);
@@ -1583,6 +1591,7 @@
                     ctx.ui.card.querySelector('.val-ang-z').innerText = adjustedCompass.toFixed(0) + "°";
 
                     if (ctx.ui.mesh) {
+                        // Use adjusted compass (with offset) for the 3D graphic
                         const e = new THREE.Euler(pitch*(Math.PI/180), adjustedCompass*(Math.PI/180), roll*(Math.PI/180), 'YXZ');
                         ctx.ui.mesh.userData.targetQuat.setFromEuler(e);
                     }
