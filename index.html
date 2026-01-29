@@ -104,7 +104,7 @@
                     </div>
                     <button class="settings-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors" title="Settings">⚙️</button>
                     <button class="calib-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-yellow-400 transition-colors" title="Calibration">🔧</button>
-                    <button class="disconnect-btn p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors" title="Remove Device">✕</button>
+                    <button class="disconnect-btn p-2 hover:bg-red-700 bg-red-900/50 rounded-full text-red-400 hover:text-white transition-colors border border-red-700/50" title="Remove Device">✕</button>
                 </div>
             </div>
 
@@ -335,14 +335,14 @@
 
                         <!-- Step 2: Magnetometer -->
                         <div class="calib-step-2 hidden">
-                            <div class="text-center mb-6">
+                            <div class="text-center mb-4">
                                 <div class="text-6xl mb-4 rotate-animation">🔄</div>
                                 <h4 class="text-xl font-bold text-white mb-2">Step 2 of 2: Compass Calibration</h4>
-                                <p class="text-slate-400 text-sm">Rotate the sensor slowly:<br>
-                                    <strong class="text-cyan-400">2× around X-axis</strong> (roll)<br>
-                                    <strong class="text-green-400">2× around Y-axis</strong> (pitch)<br>
-                                    <strong class="text-purple-400">2× around Z-axis</strong> (yaw)
-                                </p>
+                                <p class="text-slate-400 text-sm">Rotate the sensor slowly in all directions.<br>Try to cover all orientations.</p>
+                            </div>
+                            
+                            <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-3 mb-4">
+                                <div class="text-xs text-amber-300">⚠️ <strong>Important:</strong> Stay away from metal objects, magnets, and electronics during calibration.</div>
                             </div>
                             
                             <div class="bg-slate-900 rounded-lg p-4 mb-4">
@@ -601,29 +601,38 @@
         // ==================== HEALTH CALCULATION ====================
 
         function calculateSensorHealth(ctx) {
-            // Health is based on:
-            // 1. Magnetometer field magnitude consistency (should be stable ~200-350)
-            // 2. Accelerometer total magnitude when still (should be ~1g)
+            // Health is based on magnetometer field magnitude consistency
+            // A well-calibrated sensor shows stable |H| magnitude regardless of orientation
             
-            let health = 50; // Base health
-            
-            if (ctx.magHistory && ctx.magHistory.length > 10) {
-                const magnitudes = ctx.magHistory.map(m => Math.sqrt(m.x*m.x + m.y*m.y + m.z*m.z));
-                const avg = magnitudes.reduce((a,b) => a+b, 0) / magnitudes.length;
-                const variance = magnitudes.reduce((sum, m) => sum + Math.pow(m - avg, 2), 0) / magnitudes.length;
-                const stdDev = Math.sqrt(variance);
-                
-                // Lower variance = better health
-                const magHealth = Math.max(0, 50 - stdDev / 2);
-                health = magHealth;
-                
-                // Bonus if magnitude is in expected range
-                if (avg > 200 && avg < 400) health += 25;
-                else if (avg > 100 && avg < 500) health += 10;
+            if (!ctx.magHistory || ctx.magHistory.length < 5) {
+                return 50; // Default when no data yet
             }
             
-            // Cap at 100
+            const magnitudes = ctx.magHistory.map(m => Math.sqrt(m.x*m.x + m.y*m.y + m.z*m.z));
+            const avg = magnitudes.reduce((a,b) => a+b, 0) / magnitudes.length;
+            
+            // Calculate coefficient of variation (stdDev / mean) - lower is better
+            const variance = magnitudes.reduce((sum, m) => sum + Math.pow(m - avg, 2), 0) / magnitudes.length;
+            const stdDev = Math.sqrt(variance);
+            const cv = avg > 0 ? (stdDev / avg) * 100 : 100; // Coefficient of variation as percentage
+            
+            // Start with base health based on consistency
+            // CV of 0% = perfect (100 health), CV of 50%+ = poor (0 health)
+            let consistencyHealth = Math.max(0, 100 - (cv * 2));
+            
+            // Bonus/penalty based on magnitude being in expected range (200-400 is typical for Earth's field)
+            let magnitudeBonus = 0;
+            if (avg > 150 && avg < 500) {
+                magnitudeBonus = 20; // Good range
+            } else if (avg > 100 && avg < 600) {
+                magnitudeBonus = 10; // Acceptable range
+            } else if (avg < 50 || avg > 800) {
+                magnitudeBonus = -20; // Likely interference or uncalibrated
+            }
+            
+            let health = consistencyHealth + magnitudeBonus;
             health = Math.min(100, Math.max(0, health));
+            
             return Math.round(health);
         }
 
@@ -699,12 +708,35 @@
             const step2 = modal.querySelector('.calib-step-2');
             const complete = modal.querySelector('.calib-complete');
             
-            // Reset state
+            // Reset ALL state
             step1.classList.remove('hidden');
             step2.classList.add('hidden');
             complete.classList.add('hidden');
+            
+            // Reset progress bars
             modal.querySelector('.accel-progress').style.width = '0%';
             modal.querySelector('.mag-progress').style.width = '0%';
+            modal.querySelector('.accel-countdown').innerText = '5s';
+            modal.querySelector('.mag-coverage').innerText = '0%';
+            
+            // Reset step 1 button
+            const accelBtn = modal.querySelector('.start-accel-calib-btn');
+            accelBtn.disabled = false;
+            accelBtn.innerText = 'Start Level Calibration';
+            
+            // Reset step 2 buttons
+            const startMagBtn = modal.querySelector('.start-mag-calib-btn');
+            const finishMagBtn = modal.querySelector('.finish-mag-calib-btn');
+            startMagBtn.classList.remove('hidden');
+            finishMagBtn.classList.add('hidden');
+            
+            // Clear any ongoing calibration
+            if (ctx.magCalibPollInterval) {
+                clearInterval(ctx.magCalibPollInterval);
+                ctx.magCalibPollInterval = null;
+            }
+            ctx.isMagCalibrating = false;
+            ctx.magCalibData = [];
             
             // Show modal
             modal.classList.remove('hidden');
@@ -995,17 +1027,23 @@
                 readChar.addEventListener('characteristicvaluechanged', (e) => handleData(e, device.id));
 
                 ctx.battInterval = setInterval(() => {
-                    if (device.gatt.connected) sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); 
+                    if (device.gatt.connected) {
+                        sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]); // Battery
+                        sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x3A, 0x00]); // Magnetometer for health
+                    }
                 }, 30000);
-                setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]), 2000);
+                setTimeout(() => {
+                    sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x64, 0x00]);
+                    // Poll mag data a few times to get initial health reading
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => sendRaw(ctx, [0xFF, 0xAA, 0x27, 0x3A, 0x00]), 500 + i * 200);
+                    }
+                }, 2000);
 
                 updatePollingSystem();
 
                 document.getElementById('recordBtn').classList.remove('hidden');
                 document.getElementById('exportBtn').classList.remove('hidden');
-                
-                // Initial health display
-                setTimeout(() => updateHealthDisplay(ctx), 3000);
                 
             } catch (e) { console.error(e); }
         });
@@ -1415,7 +1453,7 @@
                     continue;
                 }
                 
-                // Magnetometer data (for calibration)
+                // Magnetometer data (for calibration and health)
                 if (packetType === 0x71 && i + 2 < buffer.length && buffer[i + 2] === 0x3A) {
                     if (i + 8 > buffer.length) continue;
                     const getS = (offset) => {
@@ -1431,6 +1469,11 @@
                     if (!ctx.magHistory) ctx.magHistory = [];
                     ctx.magHistory.push({ x: magX, y: magY, z: magZ });
                     if (ctx.magHistory.length > 50) ctx.magHistory.shift();
+                    
+                    // Update health display periodically
+                    if (ctx.magHistory.length % 5 === 0) {
+                        updateHealthDisplay(ctx);
+                    }
                     
                     // Update calibration if active
                     if (ctx.isMagCalibrating) {
