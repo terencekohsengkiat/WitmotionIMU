@@ -232,19 +232,27 @@
 
                         <!-- Compass Offset Section -->
                         <div class="space-y-3">
-                            <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Compass Offset</h4>
+                            <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-widest border-b border-slate-700 pb-1">3. Compass Correction</h4>
                             <div class="bg-yellow-900/30 border border-yellow-700 rounded p-3">
-                                <div class="text-sm font-bold text-yellow-300 mb-2">🧭 Manual Compass Correction</div>
+                                <div class="text-sm font-bold text-yellow-300 mb-2">🧭 Set True Bearing</div>
                                 <div class="text-xs text-yellow-200/70 mb-3">
-                                    Place sensor flat, check with a real compass, then enter the difference.<br>
-                                    <strong>Offset = Real Compass - Sensor Reading</strong>
+                                    Place sensor flat, use a real compass to check the direction it's pointing, then enter that bearing below.
+                                </div>
+                                <div class="flex gap-2 items-center mb-2">
+                                    <span class="text-slate-400 text-sm">Sensor reads:</span>
+                                    <span class="current-sensor-heading text-cyan-400 font-mono font-bold">--°</span>
+                                    <span class="text-slate-500 text-xs">(raw, updates live)</span>
                                 </div>
                                 <div class="flex gap-2 items-center">
-                                    <input type="number" class="compass-offset-input bg-slate-900 border border-slate-600 text-white text-sm rounded block w-24 p-2 text-center" placeholder="0" min="-180" max="180" value="0">
-                                    <span class="text-yellow-300">degrees</span>
-                                    <button class="apply-compass-offset-btn bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded text-sm font-bold">Apply</button>
+                                    <span class="text-slate-400 text-sm">True bearing:</span>
+                                    <input type="number" class="true-bearing-input bg-slate-900 border border-slate-600 text-white text-sm rounded block w-24 p-2 text-center" placeholder="0" min="0" max="359" value="">
+                                    <span class="text-yellow-300">°</span>
+                                    <button class="apply-true-bearing-btn bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-2 rounded text-sm font-bold">Set</button>
                                 </div>
-                                <div class="text-[10px] text-yellow-300/50 mt-2">Current offset: <span class="current-compass-offset">0°</span></div>
+                                <div class="flex items-center justify-between mt-2">
+                                    <div class="text-[10px] text-yellow-300/50">Current offset: <span class="current-compass-offset">0°</span></div>
+                                    <button class="reset-compass-offset-btn text-[10px] text-red-400 hover:text-red-300 underline">Reset to 0</button>
+                                </div>
                             </div>
                         </div>
 
@@ -1176,6 +1184,8 @@
             const calibModal = liveCard.querySelector('.calibration-modal');
             
             // Settings modal
+            let headingUpdateInterval = null;
+            
             liveCard.querySelector('.settings-btn').addEventListener('click', () => {
                 const ctx = devices.get(device.id);
                 
@@ -1193,8 +1203,27 @@
                 
                 // Compass offset
                 const compassOffset = savedSettings.compassOffset || 0;
-                liveCard.querySelector('.compass-offset-input').value = compassOffset;
                 liveCard.querySelector('.current-compass-offset').innerText = compassOffset + '°';
+                
+                // Function to update displayed heading
+                const updateHeadingDisplay = () => {
+                    const ctx = devices.get(device.id);
+                    const savedSettings = loadSettings(device.id);
+                    const compassOffset = savedSettings.compassOffset || 0;
+                    
+                    if (ctx && ctx.lastHeading !== undefined) {
+                        let rawHeading = (ctx.lastHeading - compassOffset + 360) % 360;
+                        liveCard.querySelector('.current-sensor-heading').innerText = rawHeading.toFixed(0) + '°';
+                    } else {
+                        liveCard.querySelector('.current-sensor-heading').innerText = '--°';
+                    }
+                };
+                
+                // Initial update
+                updateHeadingDisplay();
+                
+                // Live update every 200ms while modal is open
+                headingUpdateInterval = setInterval(updateHeadingDisplay, 200);
                 
                 // Quat status
                 const statusEl = liveCard.querySelector('.quat-status-indicator');
@@ -1213,17 +1242,53 @@
             });
             
             liveCard.querySelector('.close-settings').addEventListener('click', () => {
+                if (headingUpdateInterval) {
+                    clearInterval(headingUpdateInterval);
+                    headingUpdateInterval = null;
+                }
                 modal.classList.add('hidden'); 
                 modal.classList.remove('flex');
             });
 
-            // Compass offset
-            liveCard.querySelector('.apply-compass-offset-btn').addEventListener('click', () => {
-                const offsetInput = liveCard.querySelector('.compass-offset-input');
-                const offset = parseInt(offsetInput.value) || 0;
-                saveSettings(device.id, { compassOffset: offset });
-                liveCard.querySelector('.current-compass-offset').innerText = offset + '°';
-                alert('Compass offset of ' + offset + '° applied!');
+            // True bearing input - calculate offset automatically
+            liveCard.querySelector('.apply-true-bearing-btn').addEventListener('click', () => {
+                const ctx = devices.get(device.id);
+                const trueBearingInput = liveCard.querySelector('.true-bearing-input');
+                const trueBearing = parseInt(trueBearingInput.value);
+                
+                if (isNaN(trueBearing) || trueBearing < 0 || trueBearing > 359) {
+                    alert('Please enter a valid bearing (0-359)');
+                    return;
+                }
+                
+                // Get current raw heading (without any offset)
+                const savedSettings = loadSettings(device.id);
+                const currentOffset = savedSettings.compassOffset || 0;
+                
+                if (ctx && ctx.lastHeading !== undefined) {
+                    // Calculate raw heading by removing current offset
+                    let rawHeading = (ctx.lastHeading - currentOffset + 360) % 360;
+                    
+                    // Calculate new offset: true bearing - raw heading
+                    let newOffset = trueBearing - rawHeading;
+                    
+                    // Normalize to -180 to +180
+                    while (newOffset > 180) newOffset -= 360;
+                    while (newOffset < -180) newOffset += 360;
+                    
+                    saveSettings(device.id, { compassOffset: newOffset });
+                    liveCard.querySelector('.current-compass-offset').innerText = newOffset.toFixed(0) + '°';
+                    
+                    alert('Compass corrected!\nTrue bearing: ' + trueBearing + '°\nOffset applied: ' + newOffset.toFixed(0) + '°');
+                } else {
+                    alert('No heading data available. Make sure the sensor is connected and sending data.');
+                }
+            });
+
+            // Reset compass offset
+            liveCard.querySelector('.reset-compass-offset-btn').addEventListener('click', () => {
+                saveSettings(device.id, { compassOffset: 0 });
+                liveCard.querySelector('.current-compass-offset').innerText = '0°';
             });
 
             // Calibration modal
